@@ -103,7 +103,7 @@
         "icon": "$(mic-off)"
       },
       {
-        "command": "modelRouter.toggleVoiceControl", 
+        "command": "modelRouter.toggleVoiceControl",
         "title": "Model Router: Toggle Voice Control",
         "icon": "$(mic-filled)"
       },
@@ -140,6 +140,31 @@
         },
         {
           "command": "modelRouter.testConnection"
+        },
+        {
+          "command": "modelRouter.startVoiceControl"
+        },
+        {
+          "command": "modelRouter.stopVoiceControl"
+        },
+        {
+          "command": "modelRouter.toggleVoiceControl"
+        },
+        {
+          "command": "modelRouter.voiceSettings"
+        },
+        {
+          "command": "modelRouter.voicePermissions"
+        }
+      ]
+    },
+    "views": {
+      "explorer": [
+        {
+          "type": "webview",
+          "id": "guidoVoiceControl",
+          "name": "🎤 Guido Voice Control",
+          "when": "config.modelRouter.voice.enabled"
         }
       ]
     }
