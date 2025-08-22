@@ -12,231 +12,327 @@ profiles:
       stripFileContentOverKB: 256
       allowExternal: true  # bei privacy-strict automatisch false
 
-    # 🎤 Erweiterte Sprachsteuerung Konfiguration
+    # 🎤 GUIDO SPRACHSTEUERUNG - Umfassende Konfiguration
     voice:
       enabled: true
-      wakeWord: "Guido"              # Primäres Aktivierungswort
-      alternativeWakeWords: ["Hey Guido", "Computer", "Assistant"]
-      language: "de-DE"              # Spracherkennung (de-DE, en-US, fr-FR, es-ES, it-IT)
-      responseLanguage: "de"         # Antwortsprache (de, en, es, fr, it, pt, ru, zh)
+      wakeWord: "Guido"                    # Aktivierungswort
+      alternativeWakeWords: ["Hey Guido", "Computer", "Assistant"]  # Alternative Aktivierungswörter
       
-      # Erweiterte Audio-Einstellungen
+      # Sprachen & Lokalisierung
+      language: 
+        recognition: "de-DE"               # Spracherkennung (de-DE, en-US, fr-FR, es-ES, it-IT)
+        response: "de"                     # Antwortsprache (de, en, fr, es, it)
+        autoDetect: true                   # Automatische Spracherkennung
+        supportedLanguages: ["de-DE", "en-US", "fr-FR", "es-ES", "it-IT"]
+      
+      # Audio & TTS Einstellungen
       audio:
-        enableBeep: true             # Bestätigungston bei Aktivierung
-        beepType: "soft"             # soft|sharp|melody|custom
-        beepVolume: 0.3             # Lautstärke Beep (0.0-1.0)
-        customBeepPath: ""          # Pfad zu eigener Beep-Datei
+        # Bestätigungstöne
+        enableBeep: true
+        beepSound: "classic"               # classic, modern, sci-fi, gentle, off
+        beepVolume: 0.4                    # 0.0-1.0
+        beepDuration: 200                  # Millisekunden
         
-        # Text-to-Speech Erweitert
-        ttsEnabled: true            # Text-to-Speech aktiviert
-        ttsEngine: "system"         # system|azure|google|amazon|elevenlabs
-        ttsVoice: "auto"            # Siehe voices-Liste unten
-        ttsSpeed: 1.0               # Sprechgeschwindigkeit (0.5-2.0)
-        ttsVolume: 0.8              # TTS-Lautstärke (0.0-1.0)
-        ttsPitch: 1.0               # Tonhöhe (0.5-2.0)
-        ttsEmphasis: "moderate"     # none|reduced|moderate|strong
+        # Text-to-Speech
+        ttsEnabled: true
+        ttsEngine: "system"                # system, azure, elevenlabs, local
+        voice:
+          gender: "neutral"                # male, female, neutral
+          language: "de-DE" 
+          name: "auto"                     # Spezifische Stimme oder "auto"
+          customVoices:                    # Benutzerdefinierte Stimmen
+            - name: "Guido-Professional"
+              engine: "azure"
+              voiceId: "de-DE-ConradNeural"
+            - name: "Guido-Friendly"  
+              engine: "system"
+              voiceId: "Microsoft Hedda Desktop"
+        speed: 1.0                         # 0.5-2.0
+        pitch: 1.0                         # 0.5-2.0
+        volume: 0.8                        # 0.0-1.0
+        pauseBetweenSentences: 300         # ms
         
-        # Audio-Verbesserungen
-        noiseReduction: true        # Rauschunterdrückung
-        echoCancellation: true      # Echo-Unterdrückung
-        autoGainControl: true       # Automatische Lautstärkeregelung
-        spatialAudio: false         # 3D-Audio (experimental)
+        # Audio-Verarbeitung
+        noiseReduction: true
+        echoCancellation: true
+        autoGainControl: true
       
-      # Verfügbare Stimmen pro Sprache
-      voices:
-        de-DE:
-          - name: "Hedda"
-            gender: "female"
-            age: "adult"
-            style: "friendly"
-            quality: "premium"
-          - name: "Stefan"
-            gender: "male" 
-            age: "adult"
-            style: "professional"
-            quality: "standard"
-          - name: "Katja"
-            gender: "female"
-            age: "young"
-            style: "energetic"
-            quality: "premium"
-        en-US:
-          - name: "Aria"
-            gender: "female"
-            age: "adult"
-            style: "conversational"
-            quality: "neural"
-          - name: "Davis"
-            gender: "male"
-            age: "adult"
-            style: "professional"
-            quality: "neural"
-      
-      # Aufnahme-Einstellungen  
+      # Sprachaufnahme
       recording:
-        timeoutSeconds: 30          # Timeout für Sprachaufnahme
-        stopWords: ["stop", "stopp", "Ende", "fertig", "schluss", "halt"]
-        minRecordingSeconds: 1      # Minimum Aufnahmezeit
-        maxRecordingSeconds: 180    # Maximum Aufnahmezeit (3 Min)
-        autoStopOnSilence: true     # Auto-Stop bei Stille
-        silenceTimeoutMs: 2000      # Stille-Timeout in Millisekunden
-        backgroundListening: true   # Kontinuierliches Zuhören
-        wakeWordSensitivity: 0.7    # Sensitivität (0.0-1.0)
+        timeoutSeconds: 45                 # Timeout für Aufnahme
+        maxRecordingSeconds: 300           # Maximum 5 Minuten
+        minRecordingSeconds: 0.5           # Minimum für gültige Aufnahme
+        silenceTimeoutSeconds: 3           # Stopp bei Stille
         
-        # Erweiterte Aufnahme-Features
-        smartNoiseSuppression: true # KI-basierte Rauschunterdrückung
-        speakerAdaptation: true     # Anpassung an Sprecher
-        multiSpeakerMode: false     # Mehrere Sprecher
-        recordingQuality: "high"    # low|medium|high|lossless
+        # Stop-Kommandos
+        stopWords: 
+          de: ["stop", "stopp", "ende", "fertig", "abbruch", "halt"]
+          en: ["stop", "end", "finish", "abort", "halt", "cancel"]
+          fr: ["stop", "fin", "arrêt", "terminé"]
+          es: ["stop", "fin", "parar", "terminar"]
+        
+        # Erweiterte Aufnahme-Einstellungen  
+        sensitivity: 0.7                   # Mikrofon-Empfindlichkeit
+        backgroundNoiseLevel: 0.1          # Hintergrundgeräusch-Schwelle
+        qualityPreset: "high"              # low, medium, high, ultra
         
       # Bestätigung & Interaktion
       confirmation:
-        required: true              # Bestätigung erforderlich
-        summaryEnabled: true        # Zusammenfassung der Eingabe
-        summaryStyle: "concise"     # concise|detailed|bullet
-        confirmWords: ["ja", "yes", "bestätigen", "ok", "korrekt", "richtig", "mach das"]
-        cancelWords: ["nein", "no", "abbrechen", "cancel", "stop", "nicht"]
-        retryWords: ["wiederholen", "nochmal", "repeat"]
+        required: true                     # Bestätigung erforderlich
+        summaryEnabled: true               # Eingabe-Zusammenfassung
+        smartConfirmation: true            # KI entscheidet ob Bestätigung nötig
         
-        # Smart Confirmation
-        skipConfirmationFor: ["simple_questions", "weather", "time", "calculations"]
-        autoConfirmAfterSeconds: 10  # Auto-bestätigen nach X Sekunden
-        visualConfirmation: true     # Visuelle Bestätigung im UI
+        # Bestätigungswörter
+        confirmWords:
+          de: ["ja", "yes", "bestätigen", "ok", "korrekt", "richtig", "genau", "mach es"]
+          en: ["yes", "confirm", "ok", "correct", "right", "exactly", "do it"]
+          fr: ["oui", "confirmer", "ok", "correct", "exact"]
+          es: ["sí", "confirmar", "ok", "correcto", "exacto"]
         
-      # Erweiterte Sprachbefehle
+        cancelWords:
+          de: ["nein", "no", "abbrechen", "cancel", "falsch", "nicht richtig", "stopp"]
+          en: ["no", "cancel", "abort", "wrong", "not correct", "stop"]
+          fr: ["non", "annuler", "faux", "pas correct", "arrêt"]
+          es: ["no", "cancelar", "falso", "incorrecto", "parar"]
+        
+        # Erweiterte Bestätigung
+        timeoutSeconds: 30                 # Timeout für Bestätigung
+        repeatSummary: true                # Wiederhole Zusammenfassung bei Unklarheit
+        askForClarification: true          # Nachfragen bei Unklarheit
+      
+      # Intelligente Sprachverarbeitung
+      processing:
+        contextAwareness: true             # Kontext-bewusste Verarbeitung
+        emotionDetection: true             # Emotion in Stimme erkennen
+        intentRecognition: true            # Absichtserkennung
+        multiTurnConversation: true        # Mehrstufige Unterhaltung
+        memoryEnabled: true                # Gesprächsgedächtnis
+        personalityMode: "professional"    # professional, friendly, casual, technical
+        
+        # NLP Verbesserungen
+        grammarCorrection: true            # Grammatik-Korrektur
+        slangDetection: true               # Umgangssprache verstehen
+        abbreviationExpansion: true        # Abkürzungen erweitern
+        
+      # Voice-spezifische Routing-Regeln
+      routing:
+        preferFast: true                   # Bevorzuge schnelle Modelle
+        maxResponseLength: 600             # Max. Zeichen für TTS
+        skipCodeInTTS: true                # Code nicht vorlesen
+        summarizeIfLong: true              # Lange Antworten zusammenfassen
+        useVoiceOptimizedPrompts: true     # Voice-optimierte Prompts
+        
+        # Intelligente Antwort-Anpassung
+        responseStyle:
+          verbosity: "medium"              # brief, medium, detailed
+          technicalLevel: "adaptive"       # beginner, intermediate, advanced, adaptive
+          formality: "casual"              # formal, casual, friendly
+        
+        # Spezielle Voice-Routing-Regeln
+        voiceRules:
+          # Kurze Fragen → Ultra-schnelle Modelle
+          - id: quick-voice-questions
+            if:
+              anyKeyword: ["was ist", "wie", "warum", "wer", "wo", "wann"]
+              maxWordCount: 10
+            then:
+              prefer: ["openai:gpt-4o-mini", "phi:phi-4-mini-instruct"]
+              target: chat
+              
+          # Code-Fragen → Spezialmodelle
+          - id: voice-coding
+            if:
+              anyKeyword: ["code", "programmieren", "bug", "fehler", "function", "variable"]
+            then:
+              prefer: ["deepseek:deepseek-v3", "ollama:qwen2.5-coder:32b-instruct"]
+              target: chat
+              
+          # Erklärungen → Qualitätsmodelle
+          - id: voice-explanations
+            if:
+              anyKeyword: ["erkläre", "erklär", "erläutere", "beschreibe", "wie funktioniert"]
+            then:
+              prefer: ["openai:gpt-4o", "deepseek:deepseek-v3"]
+              target: chat
+      
+      # 🔐 BERECHTIGUNGEN & SICHERHEIT
+      permissions:
+        # Mikrofon-Zugriff
+        microphoneAccess: 
+          required: true
+          requestOnStartup: true
+          showPermissionDialog: true
+        
+        # Datenschutz
+        privacy:
+          storeRecordings: false           # Aufnahmen speichern
+          anonymizeTranscripts: true       # Transkripte anonymisieren
+          localProcessingOnly: false       # Nur lokale Verarbeitung
+          encryptStoredData: true          # Gespeicherte Daten verschlüsseln
+          
+          # DSGVO-Konformität
+          gdprCompliant: true
+          dataRetentionDays: 30            # Daten-Aufbewahrungszeit
+          allowDataCollection: false      # Datensammlung erlauben
+          userConsentRequired: true        # Nutzereinwilligung erforderlich
+        
+        # Funktions-Berechtigungen
+        allowedActions:
+          - "chat"                         # Chat-Funktionen
+          - "codeGeneration"               # Code generieren
+          - "fileOperations"               # Dateien öffnen/bearbeiten
+          - "searchOperations"             # Suchen in Projekt
+          - "settingsChange"               # Einstellungen ändern
+          - "extensionControl"             # Extension-Steuerung
+        
+        restrictedActions:                 # Aktionen die Bestätigung brauchen
+          - "deleteFiles"
+          - "executeCommands"
+          - "networkRequests"
+          - "systemAccess"
+        
+        # Arbeitszeit-Beschränkungen
+        workingHours:
+          enabled: false
+          startTime: "08:00"
+          endTime: "18:00"
+          allowWeekends: true
+          quietHours:
+            enabled: true
+            startTime: "22:00"
+            endTime: "07:00"
+            reducedVolume: 0.3
+      
+      # 🎯 ERWEITERTE SPRACHBEFEHLE
       commands:
         # System-Befehle
         system:
-          - trigger: ["modus wechseln", "change mode"]
-            action: "switchMode"
-            params: ["auto", "speed", "quality", "cheap", "local", "privacy"]
-          - trigger: ["kosten anzeigen", "show costs"]
-            action: "showBudget"
-          - trigger: ["provider testen", "test connection"]
-            action: "testProviders"
-          - trigger: ["konfiguration öffnen", "open config"]
-            action: "openConfig"
-            
-        # Voice-spezifische Befehle
-        voice:
-          - trigger: ["leiser", "quieter"]
-            action: "decreaseVolume"
-            step: 0.1
-          - trigger: ["lauter", "louder"]
-            action: "increaseVolume"
-            step: 0.1
-          - trigger: ["langsamer sprechen", "speak slower"]
-            action: "decreaseSpeed"
-            step: 0.1
-          - trigger: ["schneller sprechen", "speak faster"]
-            action: "increaseSpeed"
-            step: 0.1
-          - trigger: ["stimme wechseln", "change voice"]
-            action: "cycleVoice"
-          - trigger: ["sprache wechseln", "change language"]
-            action: "cycleLanguage"
-            
-        # Content-Befehle
-        content:
-          - trigger: ["code erklären", "explain code"]
-            action: "explainCode"
-            context: "selection"
-          - trigger: ["code optimieren", "optimize code"]
-            action: "optimizeCode"
-            context: "selection"
-          - trigger: ["tests schreiben", "write tests"]
-            action: "writeTests"
-            context: "file"
-          - trigger: ["dokumentation", "documentation"]
-            action: "generateDocs"
-            context: "selection"
-          - trigger: ["refactor", "restructure"]
-            action: "refactorCode"
-            context: "selection"
-            
-        # Navigation & UI
-        navigation:
-          - trigger: ["datei öffnen", "open file"]
-            action: "openFile"
-          - trigger: ["terminal öffnen", "open terminal"]
-            action: "openTerminal"
-          - trigger: ["probleme anzeigen", "show problems"]
-            action: "showProblems"
-          - trigger: ["suchen", "search"]
-            action: "globalSearch"
-      
-      # Voice-spezifische Routing-Regeln
-      routing:
-        preferFast: true            # Bei Voice bevorzuge schnelle Modelle
-        maxResponseLength: 800      # Max. Zeichen für TTS
-        skipCodeInTTS: true         # Code nicht vorlesen
-        summarizeIfLong: true       # Lange Antworten zusammenfassen
-        useSimpleLanguage: true     # Einfache Sprache verwenden
-        
-        # Kontext-spezifische Einstellungen
-        contextAware: true          # Editor-Kontext berücksichtigen
-        fileTypeOptimization: true  # Dateityp-spezifische Optimierung
-        prioritizeLocalForPrivacy: true # Bei sensiblen Daten lokal bleiben
-        
-      # Berechtigungen & Sicherheit
-      permissions:
-        allowSystemCommands: true   # System-Befehle erlauben
-        allowFileOperations: true   # Datei-Operationen erlauben
-        allowTerminalAccess: false  # Terminal-Zugriff (VORSICHT!)
-        allowNetworkRequests: true  # Netzwerk-Anfragen
-        allowExtensionControl: true # Andere Extensions steuern
-        
-        # Sicherheits-Level
-        securityLevel: "medium"     # low|medium|high|paranoid
-        requireConfirmationFor:     # Bestätigung erforderlich für:
-          - "file_deletion"
-          - "terminal_commands"  
-          - "system_settings"
-          - "network_requests"
-          - "extension_install"
+          "Guido aufwachen": "startListening"
+          "Guido schlafen": "stopListening"
+          "Mikrofon stumm": "muteAudio"
+          "Mikrofon an": "unmuteAudio"
+          "Lauter sprechen": "increaseVolume"
+          "Leiser sprechen": "decreaseVolume"
+          "Schneller sprechen": "increaseSpeed"
+          "Langsamer sprechen": "decreaseSpeed"
           
-        # Audit & Logging
-        auditLog: true              # Alle Befehle loggen
-        auditLogPath: "./voice-audit.log"
-        maxAuditEntries: 1000       # Max. Log-Einträge
+        # Sprache wechseln
+        language:
+          "Wechsle zu Englisch": "switchToEnglish"
+          "Switch to German": "switchToGerman"
+          "Parlez français": "switchToFrench"
+          "Habla español": "switchToSpanish"
+          
+        # Routing-Befehle
+        routing:
+          "Benutze schnelles Modell": "setModeSpeed"
+          "Benutze bestes Modell": "setModeQuality"
+          "Benutze günstiges Modell": "setModeCheap"
+          "Nur lokale Modelle": "setModeLocal"
+          "Datenschutz Modus": "setModePrivacy"
+          
+        # VSCode Integration
+        vscode:
+          "Öffne Datei": "openFile"
+          "Neue Datei": "newFile"
+          "Speichern": "saveFile"
+          "Code formatieren": "formatCode"
+          "Suche nach": "searchInFiles"
+          "Ersetze": "replaceInFiles"
+          "Git Status": "gitStatus"
+          "Terminal öffnen": "openTerminal"
+          
+        # Entwickler-Befehle  
+        development:
+          "Erkläre diesen Code": "explainCode"
+          "Finde Bugs": "findBugs"
+          "Schreibe Tests": "writeTests"
+          "Optimiere Code": "optimizeCode"
+          "Dokumentation erstellen": "generateDocs"
+          "Code Review": "reviewCode"
+          
+        # Custom Commands (erweiterbar)
+        custom: {}
+      
+      # 🎨 UI & UX EINSTELLUNGEN
+      interface:
+        # Visuelles Feedback
+        showVisualFeedback: true
+        animationDuration: 300             # ms
+        theme: "auto"                      # auto, dark, light
+        colors:
+          listening: "#0078d4"
+          recording: "#d73a49"  
+          processing: "#ffc107"
+          success: "#28a745"
+          error: "#dc3545"
         
-      # Erweiterte Features
+        # Webview-Einstellungen
+        webview:
+          position: "beside"               # beside, active, tab
+          autoHide: false                  # Automatisch verstecken
+          minimizeOnStartup: false         # Minimiert starten
+          showWaveform: true               # Audio-Wellenform anzeigen
+          showTranscript: true             # Live-Transkript anzeigen
+          
+        # Benachrichtigungen
+        notifications:
+          showStartStop: true              # Start/Stop-Nachrichten
+          showErrors: true                 # Fehler-Nachrichten  
+          showCostWarnings: true           # Kosten-Warnungen
+          playAudioNotifications: true     # Audio-Benachrichtigungen
+          position: "bottomRight"          # topLeft, topRight, bottomLeft, bottomRight
+      
+      # 📊 ANALYTICS & MONITORING  
+      analytics:
+        enabled: false                     # Analytics aktivieren (Privacy-konform)
+        trackUsage: false                  # Nutzung verfolgen
+        trackPerformance: true             # Performance überwachen
+        trackErrors: true                  # Fehler protokollieren
+        
+        # Lokale Statistiken (keine externe Übertragung)
+        localStats:
+          commandCount: true               # Befehlszähler
+          recognitionAccuracy: true        # Erkennungsgenauigkeit
+          responseTime: true               # Antwortzeiten
+          modelUsage: true                 # Modell-Nutzung
+          
+      # 🔧 ERWEITERTE FUNKTIONEN
       advanced:
-        # Persönlichkeit
-        personality: "professional" # professional|friendly|casual|technical
-        emotionalResponses: true    # Emotionale Reaktionen
-        userAdaptation: true        # Anpassung an Benutzer-Stil
-        learningMode: true          # Aus Fehlern lernen
+        # KI-Persönlichkeit
+        personality:
+          name: "Guido"
+          style: "professional_friendly"    # Antwortstil
+          humor: "subtle"                   # none, subtle, moderate, witty
+          empathy: "high"                   # low, medium, high
+          proactivity: "medium"             # Wie proaktiv soll Guido sein
+          
+        # Lernfähigkeit
+        learning:
+          adaptToUser: true                # An Nutzer anpassen
+          rememberPreferences: true        # Präferenzen merken  
+          improveRecognition: true         # Spracherkennung verbessern
+          contextMemoryMinutes: 30         # Kontext-Gedächtnis in Minuten
+          
+        # Integration mit anderen Tools
+        integrations:
+          calendar: false                  # Kalender-Integration
+          email: false                     # E-Mail-Integration
+          tasks: false                     # Aufgaben-Integration
+          notes: false                     # Notizen-Integration
+          
+      # 🚨 NOTFALL & DEBUGGING
+      emergency:
+        panicMode: "Alt+F4"               # Notfall-Taste (alles stoppen)
+        debugMode: false                  # Debug-Modus aktivieren
+        verboseLogging: false             # Ausführliche Logs
+        fallbackToText: true              # Bei Problemen zu Text-Chat wechseln
         
-        # Smart Features
-        contextMemory: true         # Kontext-Gedächtnis
-        conversationHistory: 10     # Letzte N Nachrichten merken
-        predictiveText: true        # Vorhersagen
-        autoCorrection: true        # Auto-Korrektur von Spracheingaben
-        
-        # Multimodal
-        gestureControl: false       # Gestensteuerung (Kamera erforderlich)
-        eyeTracking: false          # Eye-Tracking (speziell Hardware)
-        biometricAuth: false        # Biometrische Authentifizierung
-        
-        # Umgebung
-        ambientNoise: "office"      # home|office|noisy|quiet
-        adaptToTimeOfDay: true      # An Tageszeit anpassen
-        energySaving: true          # Energie-Spar-Modus
-        
-        # Integration
-        calendarIntegration: false  # Kalender-Integration
-        emailIntegration: false     # E-Mail-Integration
-        slackIntegration: false     # Slack-Integration
-        teamsIntegration: false     # Teams-Integration
-        
-      # Troubleshooting & Debug
-      debug:
-        verboseLogging: false       # Ausführliches Logging
-        showRecognitionConfidence: false # Erkennungs-Konfidenz anzeigen
-        audioVisualization: false   # Audio-Wellenform anzeigen
-        latencyMeasurement: false   # Latenz messen
-        performanceMetrics: false   # Performance-Metriken
+        # Fehlerbehandlung
+        errorRecovery:
+          autoRestart: true               # Automatischer Neustart bei Fehlern
+          maxRetries: 3                   # Maximale Wiederholungsversuche
+          fallbackModel: "openai:gpt-4o-mini"  # Fallback-Modell bei Fehlern
 
     providers:
       # OpenAI-kompatible Endpunkte
@@ -260,7 +356,7 @@ profiles:
               outputPerMTok: 10.00
           - name: gpt-4o-mini
             context: 128000
-            caps: ["cheap","tools","json","voice"]
+            caps: ["cheap","tools","json"]
             price:
               inputPerMTok: 0.15
               cachedInputPerMTok: 0.08
@@ -299,7 +395,7 @@ profiles:
               outputPerMTok: 15.00
           - name: grok-3-mini
             context: 131072
-            caps: ["cheap","tools","voice"]
+            caps: ["cheap","tools"]
             price:
               inputPerMTok: 0.25
               outputPerMTok: 1.27
@@ -312,13 +408,13 @@ profiles:
         models:
           - name: phi-4
             context: 128000
-            caps: ["cheap","tools","json","long","voice"]
+            caps: ["cheap","tools","json","long"]
             price:
               inputPerMTok: 0.13
               outputPerMTok: 0.50
           - name: phi-4-mini-instruct
             context: 128000
-            caps: ["ultracheap","tools","voice"]
+            caps: ["ultracheap","tools"]
             price:
               inputPerMTok: 0.08
               outputPerMTok: 0.30
@@ -330,10 +426,10 @@ profiles:
         models:
           - name: llama3.3:70b-instruct
             context: 32768
-            caps: ["local","long","tools","voice"]
+            caps: ["local","long","tools"]
           - name: qwen2.5-coder:32b-instruct
             context: 32768
-            caps: ["local","coder","voice"]
+            caps: ["local","coder"]
 
     routing:
       rules:
@@ -368,22 +464,6 @@ profiles:
             privacyStrict: true
           then:
             prefer: ["ollama:llama3.3:70b-instruct", "ollama:qwen2.5-coder:32b-instruct"]
-            target: chat
-
-        # 5) Voice-Eingabe → schnelle, voice-optimierte Modelle
-        - id: voice-input
-          if:
-            anyKeyword: ["voice", "speech", "spoken"]
-          then:
-            prefer: ["openai:gpt-4o-mini", "phi:phi-4", "grok:grok-3-mini", "ollama:qwen2.5-coder:32b-instruct"]
-            target: chat
-
-        # 6) Dokumentation → kreative Modelle
-        - id: documentation
-          if:
-            anyKeyword: ["document", "readme", "explain", "comment"]
-          then:
-            prefer: ["openai:gpt-4o", "deepseek:deepseek-v3"]
             target: chat
 
       default:

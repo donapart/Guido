@@ -1,1431 +1,893 @@
 /**
- * Advanced Voice Controller for Guido Model Router
- * Handles wake word detection, speech recognition, TTS, and voice commands
+ * Guido Voice Controller - Hauptsteuerung für Spracherkennung
+ * Verwaltet Wake Word Detection, Recording, Processing und TTS
  */
 
 import * as vscode from "vscode";
-import * as fs from "fs";
-import * as path from "path";
+import { 
+  VoiceConfig, VoiceState, VoiceEvent, VoiceTranscript, VoiceResponse,
+  VoiceSession, VoiceStats, VoiceRoutingContext, PermissionStatus,
+  VoiceCommandHandler, SupportedLanguage
+} from "./types";
+import { VoiceWebviewProvider } from "./webview/voiceWebviewProvider";
+import { VoiceCommandProcessor } from "./commands/voiceCommandProcessor";
+import { VoicePermissionManager } from "./permissions/voicePermissionManager";
+import { AudioManager } from "./audio/audioManager";
 import { ModelRouter } from "../router";
-import { AudioManager } from "./audioManager";
-import { VoiceCommandProcessor } from "./voiceCommandProcessor";
-import { PermissionManager } from "./permissionManager";
-
-export interface VoiceConfig {
-  enabled: boolean;
-  wakeWord: string;
-  alternativeWakeWords: string[];
-  language: string;
-  responseLanguage: string;
-  
-  audio: {
-    enableBeep: boolean;
-    beepType: string;
-    beepVolume: number;
-    customBeepPath: string;
-    ttsEnabled: boolean;
-    ttsEngine: string;
-    ttsVoice: string;
-    ttsSpeed: number;
-    ttsVolume: number;
-    ttsPitch: number;
-    ttsEmphasis: string;
-    noiseReduction: boolean;
-    echoCancellation: boolean;
-    autoGainControl: boolean;
-    spatialAudio: boolean;
-  };
-  
-  voices: Record<string, Array<{
-    name: string;
-    gender: string;
-    age: string;
-    style: string;
-    quality: string;
-  }>>;
-  
-  recording: {
-    timeoutSeconds: number;
-    stopWords: string[];
-    minRecordingSeconds: number;
-    maxRecordingSeconds: number;
-    autoStopOnSilence: boolean;
-    silenceTimeoutMs: number;
-    backgroundListening: boolean;
-    wakeWordSensitivity: number;
-    smartNoiseSuppression: boolean;
-    speakerAdaptation: boolean;
-    multiSpeakerMode: boolean;
-    recordingQuality: string;
-  };
-  
-  confirmation: {
-    required: boolean;
-    summaryEnabled: boolean;
-    summaryStyle: string;
-    confirmWords: string[];
-    cancelWords: string[];
-    retryWords: string[];
-    skipConfirmationFor: string[];
-    autoConfirmAfterSeconds: number;
-    visualConfirmation: boolean;
-  };
-  
-  commands: {
-    system: Array<{ trigger: string[]; action: string; params?: string[]; step?: number; }>;
-    voice: Array<{ trigger: string[]; action: string; step?: number; }>;
-    content: Array<{ trigger: string[]; action: string; context?: string; }>;
-    navigation: Array<{ trigger: string[]; action: string; }>;
-  };
-  
-  routing: {
-    preferFast: boolean;
-    maxResponseLength: number;
-    skipCodeInTTS: boolean;
-    summarizeIfLong: boolean;
-    useSimpleLanguage: boolean;
-    contextAware: boolean;
-    fileTypeOptimization: boolean;
-    prioritizeLocalForPrivacy: boolean;
-  };
-  
-  permissions: {
-    allowSystemCommands: boolean;
-    allowFileOperations: boolean;
-    allowTerminalAccess: boolean;
-    allowNetworkRequests: boolean;
-    allowExtensionControl: boolean;
-    securityLevel: string;
-    requireConfirmationFor: string[];
-    auditLog: boolean;
-    auditLogPath: string;
-    maxAuditEntries: number;
-  };
-  
-  advanced: {
-    personality: string;
-    emotionalResponses: boolean;
-    userAdaptation: boolean;
-    learningMode: boolean;
-    contextMemory: boolean;
-    conversationHistory: number;
-    predictiveText: boolean;
-    autoCorrection: boolean;
-    gestureControl: boolean;
-    eyeTracking: boolean;
-    biometricAuth: boolean;
-    ambientNoise: string;
-    adaptToTimeOfDay: boolean;
-    energySaving: boolean;
-    calendarIntegration: boolean;
-    emailIntegration: boolean;
-    slackIntegration: boolean;
-    teamsIntegration: boolean;
-  };
-  
-  debug: {
-    verboseLogging: boolean;
-    showRecognitionConfidence: boolean;
-    audioVisualization: boolean;
-    latencyMeasurement: boolean;
-    performanceMetrics: boolean;
-  };
-}
-
-export interface VoiceSession {
-  id: string;
-  startTime: Date;
-  isActive: boolean;
-  transcript: string;
-  confidence: number;
-  language: string;
-  speakerId?: string;
-  context?: any;
-}
 
 export class VoiceController {
-  private isListening = false;
-  private isRecording = false;
-  private webviewPanel?: vscode.WebviewPanel;
-  private audioManager: AudioManager;
+  private state: VoiceState = "idle";
+  private config: VoiceConfig;
+  private webviewProvider: VoiceWebviewProvider;
   private commandProcessor: VoiceCommandProcessor;
-  private permissionManager: PermissionManager;
+  private permissionManager: VoicePermissionManager;
+  private audioManager: AudioManager;
+  private router: ModelRouter;
+  
+  // Session Management
   private currentSession?: VoiceSession;
-  private conversationHistory: string[] = [];
-  private wakeWordBuffer: string[] = [];
-  private auditLog: Array<{ timestamp: Date; action: string; details: any }> = [];
+  private eventListeners: Map<string, ((event: VoiceEvent) => void)[]> = new Map();
+  private stats: VoiceStats;
+  
+  // State Management
+  private isInitialized = false;
+  private wakeLockRequest?: any;
+  private recognitionTimeout?: NodeJS.Timeout;
+  private confirmationTimeout?: NodeJS.Timeout;
 
   constructor(
     private context: vscode.ExtensionContext,
-    private config: VoiceConfig,
-    private router: ModelRouter
+    config: VoiceConfig,
+    router: ModelRouter
   ) {
-    this.audioManager = new AudioManager(config.audio);
-    this.commandProcessor = new VoiceCommandProcessor(config, router);
-    this.permissionManager = new PermissionManager(config.permissions);
+    this.config = config;
+    this.router = router;
+    this.stats = this.initializeStats();
     
-    this.loadAuditLog();
-    this.setupEventListeners();
+    // Initialize components
+    this.webviewProvider = new VoiceWebviewProvider(context, config);
+    this.commandProcessor = new VoiceCommandProcessor(config, router);
+    this.permissionManager = new VoicePermissionManager(config);
+    this.audioManager = new AudioManager(config);
+    
+    // Setup event handlers
+    this.setupEventHandlers();
   }
 
-  async startVoiceControl(): Promise<void> {
-    if (!this.config.enabled) {
-      vscode.window.showWarningMessage("Sprachsteuerung ist deaktiviert");
+  /**
+   * Initialize the voice control system
+   */
+  async initialize(): Promise<void> {
+    if (this.isInitialized) {
       return;
     }
 
-    this.log("Voice control started");
-
-    // Erstelle Voice Control Webview
-    this.webviewPanel = vscode.window.createWebviewPanel(
-      'guidoVoice',
-      '🎤 Guido Advanced Voice Control',
-      vscode.ViewColumn.Beside,
-      {
-        enableScripts: true,
-        retainContextWhenHidden: true,
-        localResourceRoots: [
-          vscode.Uri.file(path.join(this.context.extensionPath, 'assets'))
-        ]
+    try {
+      // 1. Check and request permissions
+      const permissions = await this.permissionManager.requestAllPermissions();
+      if (!permissions.microphone || permissions.microphone !== "granted") {
+        throw new Error("Mikrofon-Berechtigung erforderlich");
       }
-    );
 
-    this.webviewPanel.webview.html = this.getAdvancedWebviewContent();
-    this.setupWebviewMessageHandling();
-    
-    // Starte erweiterte Wake Word Detection
-    await this.startAdvancedWakeWordDetection();
-    
-    // Initiale TTS Begrüßung
-    if (this.config.audio.ttsEnabled) {
-      await this.speak(this.getGreeting());
+      // 2. Initialize audio system
+      await this.audioManager.initialize();
+
+      // 3. Initialize webview
+      await this.webviewProvider.initialize();
+
+      // 4. Setup wake word detection
+      await this.setupWakeWordDetection();
+
+      // 5. Register command handlers
+      await this.registerDefaultCommands();
+
+      // 6. Start listening if auto-start enabled
+      if (this.config.permissions.microphoneAccess.requestOnStartup) {
+        await this.startListening();
+      }
+
+      this.isInitialized = true;
+      this.setState("idle");
+      
+      vscode.window.showInformationMessage("🎤 Guido Voice Control ist bereit!");
+      
+    } catch (error) {
+      this.handleError("Initialization failed", error);
+      throw error;
     }
   }
 
-  async stopVoiceControl(): Promise<void> {
-    this.isListening = false;
-    this.isRecording = false;
-    
-    if (this.currentSession?.isActive) {
-      this.currentSession.isActive = false;
+  /**
+   * Start voice control (begins listening for wake word)
+   */
+  async startListening(): Promise<void> {
+    if (!this.isInitialized) {
+      await this.initialize();
     }
 
-    this.log("Voice control stopped");
-    
-    if (this.webviewPanel) {
-      this.webviewPanel.dispose();
+    if (this.state === "listening") {
+      return;
     }
 
-    if (this.config.audio.ttsEnabled) {
-      await this.speak("Auf Wiedersehen!");
+    try {
+      // Check working hours
+      if (!this.isWithinWorkingHours()) {
+        if (this.config.permissions.workingHours.quietHours.enabled) {
+          this.audioManager.setVolume(this.config.permissions.workingHours.quietHours.reducedVolume);
+        }
+      }
+
+      // Start wake word detection
+      await this.webviewProvider.sendMessage({
+        command: "startWakeWordDetection",
+        config: {
+          wakeWord: this.config.wakeWord,
+          alternativeWakeWords: this.config.alternativeWakeWords,
+          language: this.config.language.recognition,
+          sensitivity: 0.8
+        }
+      });
+
+      this.setState("listening");
+      
+      if (this.config.interface.notifications.showStartStop) {
+        this.showNotification(`🎤 Höre auf "${this.config.wakeWord}"...`);
+      }
+
+    } catch (error) {
+      this.handleError("Failed to start listening", error);
     }
   }
 
-  private async startAdvancedWakeWordDetection(): Promise<void> {
-    this.isListening = true;
-    this.updateStatus("listening", `Höre auf "${this.config.wakeWord}" und Alternativen...`);
+  /**
+   * Stop voice control
+   */
+  async stopListening(): Promise<void> {
+    try {
+      await this.webviewProvider.sendMessage({ command: "stopListening" });
+      this.clearTimeouts();
+      this.setState("idle");
+      
+      if (this.config.interface.notifications.showStartStop) {
+        this.showNotification("🛑 Voice Control gestoppt");
+      }
+
+    } catch (error) {
+      this.handleError("Failed to stop listening", error);
+    }
+  }
+
+  /**
+   * Handle wake word detection
+   */
+  async onWakeWordDetected(): Promise<void> {
+    try {
+      // Play confirmation beep
+      if (this.config.audio.enableBeep) {
+        await this.audioManager.playBeep(
+          this.config.audio.beepSound,
+          this.config.audio.beepVolume,
+          this.config.audio.beepDuration
+        );
+      }
+
+      // Start recording session
+      this.startSession();
+      await this.startRecording();
+
+    } catch (error) {
+      this.handleError("Wake word handling failed", error);
+    }
+  }
+
+  /**
+   * Start recording user input
+   */
+  private async startRecording(): Promise<void> {
+    this.setState("recording");
     
-    // Send initialization to webview
-    this.sendToWebview({
-      command: 'initializeVoice',
+    const recordingConfig = {
+      maxDuration: this.config.recording.maxRecordingSeconds * 1000,
+      timeout: this.config.recording.timeoutSeconds * 1000,
+      silenceTimeout: this.config.recording.silenceTimeoutSeconds * 1000,
+      language: this.config.language.recognition,
+      stopWords: this.config.recording.stopWords
+    };
+
+    await this.webviewProvider.sendMessage({
+      command: "startRecording",
+      config: recordingConfig
+    });
+
+    // Set recording timeout
+    this.recognitionTimeout = setTimeout(() => {
+      this.onRecordingTimeout();
+    }, recordingConfig.timeout);
+
+    this.showNotification("🔴 Aufnahme läuft - sagen Sie 'stop' zum Beenden");
+  }
+
+  /**
+   * Stop recording and process transcript
+   */
+  async onRecordingStopped(transcript: string, confidence: number = 1.0): Promise<void> {
+    this.clearTimeouts();
+    this.setState("processing");
+
+    try {
+      // Create transcript object
+      const voiceTranscript: VoiceTranscript = {
+        text: transcript,
+        confidence,
+        language: this.config.language.recognition,
+        duration: 0, // Will be set by audio manager
+        startTime: Date.now() - 5000, // Approximate
+        endTime: Date.now(),
+        isComplete: true
+      };
+
+      // Add to current session
+      if (this.currentSession) {
+        this.currentSession.transcripts.push(voiceTranscript);
+      }
+
+      // Process the transcript
+      await this.processTranscript(voiceTranscript);
+
+    } catch (error) {
+      this.handleError("Recording processing failed", error);
+    }
+  }
+
+  /**
+   * Process voice transcript
+   */
+  private async processTranscript(transcript: VoiceTranscript): Promise<void> {
+    try {
+      this.showNotification("🧠 Verarbeite Eingabe...");
+
+      // Create routing context
+      const routingContext: VoiceRoutingContext = {
+        transcript: transcript.text,
+        confidence: transcript.confidence,
+        language: transcript.language,
+        emotion: transcript.emotions?.[0],
+        intent: transcript.intent,
+        sessionContext: this.currentSession?.transcripts || [],
+        userPreferences: this.getUserPreferences(),
+        environmentContext: await this.getEnvironmentContext()
+      };
+
+      // Check for direct commands first
+      const commandResponse = await this.commandProcessor.processCommand(routingContext);
+      if (commandResponse) {
+        await this.handleResponse(commandResponse);
+        return;
+      }
+
+      // Generate summary if required
+      if (this.config.confirmation.summaryEnabled) {
+        const summary = await this.generateSummary(transcript.text);
+        
+        if (this.shouldRequireConfirmation(transcript.text)) {
+          await this.requestConfirmation(summary, transcript.text);
+          return;
+        }
+      }
+
+      // Process with AI model
+      const response = await this.generateAIResponse(routingContext);
+      await this.handleResponse(response);
+
+    } catch (error) {
+      this.handleError("Transcript processing failed", error);
+    }
+  }
+
+  /**
+   * Generate AI response using routing
+   */
+  private async generateAIResponse(context: VoiceRoutingContext): Promise<VoiceResponse> {
+    try {
+      // Create voice-optimized prompt
+      const prompt = this.createVoiceOptimizedPrompt(context);
+      
+      // Route to appropriate model
+      const routingResult = await this.router.route({
+        prompt,
+        mode: this.config.routing.preferFast ? "speed" : "auto",
+        lang: this.getLanguageFromContext(context),
+        metadata: { 
+          isVoiceInput: true,
+          language: context.language,
+          confidence: context.confidence
+        }
+      });
+
+      // Generate response
+      const startTime = Date.now();
+      const aiResult = await routingResult.provider.chatComplete(
+        routingResult.modelName,
+        [{ role: "user", content: prompt }],
+        { 
+          maxTokens: this.calculateMaxTokens(),
+          temperature: 0.7 
+        }
+      );
+      const duration = Date.now() - startTime;
+
+      // Create voice response
+      const response: VoiceResponse = {
+        text: aiResult.content,
+        shouldSpeak: this.config.audio.ttsEnabled,
+        metadata: {
+          model: routingResult.modelName,
+          provider: routingResult.providerId,
+          cost: 0, // Will be calculated by price manager
+          duration,
+          tokens: {
+            input: aiResult.usage?.inputTokens || 0,
+            output: aiResult.usage?.outputTokens || 0
+          }
+        }
+      };
+
+      return response;
+
+    } catch (error) {
+      throw new Error(`AI response generation failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Handle AI response (display and/or speak)
+   */
+  private async handleResponse(response: VoiceResponse): Promise<void> {
+    try {
+      // Add to current session
+      if (this.currentSession) {
+        this.currentSession.responses.push(response);
+      }
+
+      // Display in webview
+      await this.webviewProvider.sendMessage({
+        command: "showResponse",
+        data: {
+          text: response.text,
+          metadata: response.metadata
+        }
+      });
+
+      // Speak if enabled
+      if (response.shouldSpeak && this.config.audio.ttsEnabled) {
+        await this.speakResponse(response.text);
+      }
+
+      // Update stats
+      this.updateStats(response);
+      
+      this.setState("idle");
+      this.endSession();
+
+      // Return to listening mode
+      if (this.config.processing.multiTurnConversation) {
+        setTimeout(() => {
+          this.startListening();
+        }, 2000);
+      }
+
+    } catch (error) {
+      this.handleError("Response handling failed", error);
+    }
+  }
+
+  /**
+   * Speak text using TTS
+   */
+  private async speakResponse(text: string): Promise<void> {
+    try {
+      // Filter out code blocks if configured
+      let spokenText = text;
+      if (this.config.routing.skipCodeInTTS) {
+        spokenText = spokenText.replace(/```[\s\S]*?```/g, "[Code-Block]");
+        spokenText = spokenText.replace(/`[^`]*`/g, "[Code]");
+      }
+
+      // Limit length
+      if (spokenText.length > this.config.routing.maxResponseLength) {
+        spokenText = spokenText.substring(0, this.config.routing.maxResponseLength) + 
+                    "... Vollständige Antwort im Editor sichtbar.";
+      }
+
+      // Use audio manager for TTS
+      await this.audioManager.speak({
+        text: spokenText,
+        language: this.config.language.response as any,
+        voice: this.config.audio.voice.name,
+        speed: this.config.audio.speed,
+        pitch: this.config.audio.pitch,
+        volume: this.config.audio.volume
+      });
+
+    } catch (error) {
+      console.warn("TTS failed:", error);
+    }
+  }
+
+  /**
+   * Request confirmation for action
+   */
+  private async requestConfirmation(summary: string, originalText: string): Promise<void> {
+    this.setState("confirming");
+    
+    const confirmationText = `Ich habe verstanden: ${summary}. Soll ich das ausführen?`;
+    
+    // Display confirmation
+    await this.webviewProvider.sendMessage({
+      command: "showConfirmation",
+      data: { 
+        summary, 
+        originalText,
+        confirmationText 
+      }
+    });
+
+    // Speak confirmation
+    if (this.config.audio.ttsEnabled) {
+      await this.speakResponse(confirmationText);
+    }
+
+    // Wait for confirmation
+    this.confirmationTimeout = setTimeout(() => {
+      this.onConfirmationTimeout();
+    }, this.config.confirmation.timeoutSeconds * 1000);
+
+    // Start listening for confirmation
+    await this.webviewProvider.sendMessage({
+      command: "listenForConfirmation",
       config: {
-        wakeWords: [this.config.wakeWord, ...this.config.alternativeWakeWords],
-        language: this.config.language,
-        sensitivity: this.config.recording.wakeWordSensitivity,
-        backgroundListening: this.config.recording.backgroundListening,
-        noiseReduction: this.config.recording.smartNoiseSuppression,
-        debug: this.config.debug
+        confirmWords: this.config.confirmation.confirmWords,
+        cancelWords: this.config.confirmation.cancelWords,
+        language: this.config.language.recognition
       }
     });
   }
 
-  private getAdvancedWebviewContent(): string {
-    const assetPath = vscode.Uri.file(path.join(this.context.extensionPath, 'assets'));
-    const assetUri = this.webviewPanel!.webview.asWebviewUri(assetPath);
-
-    return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Guido Advanced Voice Control</title>
-      <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        
-        body { 
-          font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
-          background: linear-gradient(135deg, #1e1e1e 0%, #2d2d30 100%);
-          color: #d4d4d4;
-          padding: 20px;
-          min-height: 100vh;
-          overflow-x: hidden;
-        }
-        
-        .header {
-          text-align: center;
-          margin-bottom: 30px;
-          background: rgba(0, 120, 212, 0.1);
-          padding: 20px;
-          border-radius: 15px;
-          border: 1px solid rgba(0, 120, 212, 0.3);
-        }
-        
-        .header h1 {
-          font-size: 2.5em;
-          margin-bottom: 10px;
-          background: linear-gradient(45deg, #0078d4, #00bcf2);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-        }
-        
-        .header .subtitle {
-          font-size: 1.1em;
-          opacity: 0.8;
-        }
-        
-        .main-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 20px;
-          margin-bottom: 20px;
-        }
-        
-        @media (max-width: 768px) {
-          .main-grid { grid-template-columns: 1fr; }
-        }
-        
-        .card {
-          background: rgba(45, 45, 48, 0.8);
-          border-radius: 12px;
-          padding: 20px;
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          backdrop-filter: blur(10px);
-        }
-        
-        .status-card {
-          text-align: center;
-          position: relative;
-          overflow: hidden;
-        }
-        
-        .status {
-          padding: 20px;
-          border-radius: 10px;
-          margin: 15px 0;
-          font-size: 1.2em;
-          font-weight: 600;
-          position: relative;
-          transition: all 0.3s ease;
-        }
-        
-        .status.listening { 
-          background: linear-gradient(45deg, #0078d4, #106ebe);
-          animation: pulse 2s infinite;
-        }
-        .status.recording { 
-          background: linear-gradient(45deg, #d73a49, #cb2431);
-          animation: recording-pulse 1s infinite;
-        }
-        .status.idle { 
-          background: linear-gradient(45deg, #28a745, #20a83a);
-        }
-        .status.processing { 
-          background: linear-gradient(45deg, #ffc107, #e0a800);
-          animation: processing 1.5s infinite;
-        }
-        .status.error {
-          background: linear-gradient(45deg, #dc3545, #c82333);
-        }
-        
-        @keyframes pulse {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.8; transform: scale(1.02); }
-        }
-        
-        @keyframes recording-pulse {
-          0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(215, 58, 73, 0.7); }
-          50% { opacity: 0.7; box-shadow: 0 0 0 20px rgba(215, 58, 73, 0); }
-        }
-        
-        @keyframes processing {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(100%); }
-        }
-        
-        .controls {
-          display: flex;
-          gap: 15px;
-          justify-content: center;
-          flex-wrap: wrap;
-          margin: 20px 0;
-        }
-        
-        .btn {
-          padding: 12px 24px;
-          border: none;
-          border-radius: 8px;
-          cursor: pointer;
-          font-size: 16px;
-          font-weight: 600;
-          transition: all 0.2s ease;
-          position: relative;
-          overflow: hidden;
-        }
-        
-        .btn:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-        }
-        
-        .btn-primary { background: linear-gradient(45deg, #28a745, #20a83a); color: white; }
-        .btn-danger { background: linear-gradient(45deg, #dc3545, #c82333); color: white; }
-        .btn-secondary { background: linear-gradient(45deg, #6c757d, #5a6268); color: white; }
-        .btn-info { background: linear-gradient(45deg, #17a2b8, #138496); color: white; }
-        
-        .transcript-area {
-          background: rgba(30, 30, 30, 0.9);
-          padding: 20px;
-          border-radius: 10px;
-          margin: 15px 0;
-          border-left: 4px solid #0078d4;
-          min-height: 100px;
-          position: relative;
-        }
-        
-        .transcript-area h3 {
-          margin-bottom: 15px;
-          color: #0078d4;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-        
-        .confidence-meter {
-          width: 100%;
-          height: 8px;
-          background: rgba(255, 255, 255, 0.1);
-          border-radius: 4px;
-          margin: 10px 0;
-          overflow: hidden;
-        }
-        
-        .confidence-fill {
-          height: 100%;
-          background: linear-gradient(90deg, #dc3545, #ffc107, #28a745);
-          transition: width 0.3s ease;
-        }
-        
-        .settings-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-          gap: 15px;
-          margin-top: 20px;
-        }
-        
-        .setting-group {
-          background: rgba(255, 255, 255, 0.05);
-          padding: 15px;
-          border-radius: 8px;
-        }
-        
-        .setting-group h4 {
-          margin-bottom: 10px;
-          color: #0078d4;
-        }
-        
-        .slider-container {
-          margin: 10px 0;
-        }
-        
-        .slider {
-          width: 100%;
-          height: 6px;
-          border-radius: 3px;
-          background: rgba(255, 255, 255, 0.2);
-          outline: none;
-        }
-        
-        .voice-visualizer {
-          width: 100%;
-          height: 60px;
-          background: rgba(0, 0, 0, 0.3);
-          border-radius: 8px;
-          margin: 15px 0;
-          position: relative;
-          overflow: hidden;
-        }
-        
-        .wave-bar {
-          position: absolute;
-          bottom: 0;
-          width: 3px;
-          background: linear-gradient(to top, #0078d4, #00bcf2);
-          border-radius: 1px;
-          transition: height 0.1s ease;
-        }
-        
-        .commands-list {
-          max-height: 300px;
-          overflow-y: auto;
-          background: rgba(0, 0, 0, 0.2);
-          border-radius: 8px;
-          padding: 15px;
-        }
-        
-        .command-item {
-          padding: 8px 12px;
-          margin: 5px 0;
-          background: rgba(255, 255, 255, 0.05);
-          border-radius: 6px;
-          border-left: 3px solid #0078d4;
-        }
-        
-        .command-trigger {
-          font-weight: bold;
-          color: #00bcf2;
-        }
-        
-        .command-desc {
-          font-size: 0.9em;
-          opacity: 0.8;
-          margin-top: 4px;
-        }
-        
-        .metrics-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-          gap: 10px;
-          margin: 15px 0;
-        }
-        
-        .metric {
-          text-align: center;
-          padding: 10px;
-          background: rgba(255, 255, 255, 0.05);
-          border-radius: 6px;
-        }
-        
-        .metric-value {
-          font-size: 1.5em;
-          font-weight: bold;
-          color: #0078d4;
-        }
-        
-        .metric-label {
-          font-size: 0.8em;
-          opacity: 0.7;
-        }
-        
-        .language-selector {
-          display: flex;
-          gap: 10px;
-          margin: 15px 0;
-          flex-wrap: wrap;
-        }
-        
-        .lang-btn {
-          padding: 8px 16px;
-          border: 2px solid rgba(0, 120, 212, 0.3);
-          background: transparent;
-          color: #d4d4d4;
-          border-radius: 20px;
-          cursor: pointer;
-          transition: all 0.2s ease;
-        }
-        
-        .lang-btn.active {
-          background: #0078d4;
-          border-color: #0078d4;
-        }
-        
-        .lang-btn:hover {
-          border-color: #0078d4;
-          background: rgba(0, 120, 212, 0.1);
-        }
-        
-        .notification {
-          position: fixed;
-          top: 20px;
-          right: 20px;
-          padding: 15px 20px;
-          border-radius: 8px;
-          color: white;
-          font-weight: 600;
-          z-index: 1000;
-          transform: translateX(400px);
-          transition: transform 0.3s ease;
-        }
-        
-        .notification.show {
-          transform: translateX(0);
-        }
-        
-        .notification.success { background: #28a745; }
-        .notification.error { background: #dc3545; }
-        .notification.info { background: #17a2b8; }
-        .notification.warning { background: #ffc107; color: #000; }
-      </style>
-    </head>
-    <body>
-      <div class="header">
-        <h1>🎤 Guido</h1>
-        <div class="subtitle">Advanced AI Voice Assistant</div>
-      </div>
+  /**
+   * Handle confirmation response
+   */
+  async onConfirmationReceived(confirmed: boolean, text: string): Promise<void> {
+    this.clearTimeouts();
+    
+    if (confirmed) {
+      // Process the original command
+      const transcript: VoiceTranscript = {
+        text,
+        confidence: 1.0,
+        language: this.config.language.recognition,
+        duration: 0,
+        startTime: Date.now(),
+        endTime: Date.now(),
+        isComplete: true
+      };
       
-      <div class="main-grid">
-        <!-- Status & Control -->
-        <div class="card status-card">
-          <div id="status" class="status idle">
-            Bereit - Sagen Sie "${this.config.wakeWord}" um zu beginnen
-          </div>
-          
-          <div class="confidence-meter" style="display: none;">
-            <div id="confidenceFill" class="confidence-fill" style="width: 0%"></div>
-          </div>
-          
-          <div class="controls">
-            <button id="startBtn" class="btn btn-primary" onclick="startListening()">
-              🎤 Zuhören starten
-            </button>
-            <button id="stopBtn" class="btn btn-danger" onclick="stopListening()">
-              ⏹️ Stopp
-            </button>
-            <button id="settingsBtn" class="btn btn-secondary" onclick="toggleSettings()">
-              ⚙️ Einstellungen
-            </button>
-          </div>
-          
-          ${this.config.debug.audioVisualization ? `
-          <div class="voice-visualizer" id="visualizer">
-            <!-- Audio-Wellenform wird hier angezeigt -->
-          </div>
-          ` : ''}
-        </div>
-        
-        <!-- Transcript & Response -->
-        <div class="card">
-          <div class="transcript-area">
-            <h3>📝 Ihre Eingabe:</h3>
-            <div id="transcript">Hier erscheint Ihre Spracheingabe...</div>
-          </div>
-          
-          <div class="transcript-area">
-            <h3>🤖 Guidos Antwort:</h3>
-            <div id="response">Hier erscheint die Antwort...</div>
-          </div>
-          
-          ${this.config.debug.performanceMetrics ? `
-          <div class="metrics-grid">
-            <div class="metric">
-              <div id="latency" class="metric-value">0ms</div>
-              <div class="metric-label">Latenz</div>
-            </div>
-            <div class="metric">
-              <div id="confidence" class="metric-value">0%</div>
-              <div class="metric-label">Konfidenz</div>
-            </div>
-            <div class="metric">
-              <div id="words-per-min" class="metric-value">0</div>
-              <div class="metric-label">WPM</div>
-            </div>
-          </div>
-          ` : ''}
-        </div>
-      </div>
+      await this.processTranscript(transcript);
+    } else {
+      // Cancel operation
+      this.setState("idle");
+      this.showNotification("❌ Aktion abgebrochen");
       
-      <!-- Einstellungen Panel -->
-      <div id="settingsPanel" class="card" style="display: none;">
-        <h3>🎛️ Voice Einstellungen</h3>
-        
-        <div class="settings-grid">
-          <!-- Sprache -->
-          <div class="setting-group">
-            <h4>🌍 Sprache</h4>
-            <div class="language-selector">
-              <button class="lang-btn active" onclick="setLanguage('de-DE')">🇩🇪 Deutsch</button>
-              <button class="lang-btn" onclick="setLanguage('en-US')">🇺🇸 English</button>
-              <button class="lang-btn" onclick="setLanguage('fr-FR')">🇫🇷 Français</button>
-              <button class="lang-btn" onclick="setLanguage('es-ES')">🇪🇸 Español</button>
-            </div>
-          </div>
-          
-          <!-- Audio -->
-          <div class="setting-group">
-            <h4>🔊 Audio</h4>
-            <div class="slider-container">
-              <label>TTS Lautstärke: <span id="volumeValue">${this.config.audio.ttsVolume}</span></label>
-              <input type="range" class="slider" min="0" max="1" step="0.1" 
-                     value="${this.config.audio.ttsVolume}" 
-                     oninput="updateVolume(this.value)">
-            </div>
-            <div class="slider-container">
-              <label>TTS Geschwindigkeit: <span id="speedValue">${this.config.audio.ttsSpeed}</span></label>
-              <input type="range" class="slider" min="0.5" max="2" step="0.1" 
-                     value="${this.config.audio.ttsSpeed}" 
-                     oninput="updateSpeed(this.value)">
-            </div>
-            <div class="slider-container">
-              <label>Beep Lautstärke: <span id="beepValue">${this.config.audio.beepVolume}</span></label>
-              <input type="range" class="slider" min="0" max="1" step="0.1" 
-                     value="${this.config.audio.beepVolume}" 
-                     oninput="updateBeepVolume(this.value)">
-            </div>
-          </div>
-          
-          <!-- Aufnahme -->
-          <div class="setting-group">
-            <h4>🎙️ Aufnahme</h4>
-            <div class="slider-container">
-              <label>Wake Word Sensitivität: <span id="sensitivityValue">${this.config.recording.wakeWordSensitivity}</span></label>
-              <input type="range" class="slider" min="0.1" max="1" step="0.1" 
-                     value="${this.config.recording.wakeWordSensitivity}" 
-                     oninput="updateSensitivity(this.value)">
-            </div>
-            <div class="slider-container">
-              <label>Timeout (Sekunden): <span id="timeoutValue">${this.config.recording.timeoutSeconds}</span></label>
-              <input type="range" class="slider" min="5" max="120" step="5" 
-                     value="${this.config.recording.timeoutSeconds}" 
-                     oninput="updateTimeout(this.value)">
-            </div>
-          </div>
-          
-          <!-- Stimmen -->
-          <div class="setting-group">
-            <h4>🗣️ Stimme</h4>
-            <select id="voiceSelect" onchange="updateVoice(this.value)">
-              ${this.getVoiceOptions()}
-            </select>
-          </div>
-        </div>
-      </div>
-      
-      <!-- Befehls-Referenz -->
-      <div class="card">
-        <h3>📋 Verfügbare Sprachbefehle</h3>
-        <div class="commands-list">
-          ${this.getCommandsList()}
-        </div>
-      </div>
-
-      <script>
-        const vscode = acquireVsCodeApi();
-        let recognition;
-        let synthesis = window.speechSynthesis;
-        let isRecording = false;
-        let currentConfig = ${JSON.stringify(this.config)};
-        let audioContext;
-        let analyser;
-        let dataArray;
-        let animationId;
-        
-        // Notification System
-        function showNotification(message, type = 'info') {
-          const notification = document.createElement('div');
-          notification.className = 'notification ' + type;
-          notification.textContent = message;
-          document.body.appendChild(notification);
-          
-          setTimeout(() => notification.classList.add('show'), 100);
-          setTimeout(() => {
-            notification.classList.remove('show');
-            setTimeout(() => document.body.removeChild(notification), 300);
-          }, 3000);
-        }
-        
-        // Speech Recognition Setup
-        ${this.getSpeechRecognitionScript()}
-        
-        // Audio Visualization
-        ${this.config.debug.audioVisualization ? this.getAudioVisualizationScript() : ''}
-        
-        // UI Functions
-        function updateStatus(type, text) {
-          const status = document.getElementById('status');
-          status.className = 'status ' + type;
-          status.textContent = text;
-        }
-        
-        function updateConfidence(confidence) {
-          if (currentConfig.debug.showRecognitionConfidence) {
-            const fill = document.getElementById('confidenceFill');
-            const meter = fill?.parentElement;
-            if (fill && meter) {
-              fill.style.width = (confidence * 100) + '%';
-              meter.style.display = 'block';
-            }
-          }
-          
-          if (currentConfig.debug.performanceMetrics) {
-            const confidenceElement = document.getElementById('confidence');
-            if (confidenceElement) {
-              confidenceElement.textContent = Math.round(confidence * 100) + '%';
-            }
-          }
-        }
-        
-        function toggleSettings() {
-          const panel = document.getElementById('settingsPanel');
-          panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-        }
-        
-        // Settings Functions
-        function setLanguage(lang) {
-          currentConfig.language = lang;
-          if (recognition) {
-            recognition.lang = lang;
-          }
-          
-          document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
-          event.target.classList.add('active');
-          
-          vscode.postMessage({
-            command: 'updateConfig',
-            key: 'language',
-            value: lang
-          });
-          
-          showNotification('Sprache geändert zu ' + lang, 'success');
-        }
-        
-        function updateVolume(value) {
-          document.getElementById('volumeValue').textContent = value;
-          currentConfig.audio.ttsVolume = parseFloat(value);
-          vscode.postMessage({
-            command: 'updateConfig',
-            key: 'audio.ttsVolume',
-            value: parseFloat(value)
-          });
-        }
-        
-        function updateSpeed(value) {
-          document.getElementById('speedValue').textContent = value;
-          currentConfig.audio.ttsSpeed = parseFloat(value);
-          vscode.postMessage({
-            command: 'updateConfig',
-            key: 'audio.ttsSpeed',
-            value: parseFloat(value)
-          });
-        }
-        
-        function updateBeepVolume(value) {
-          document.getElementById('beepValue').textContent = value;
-          currentConfig.audio.beepVolume = parseFloat(value);
-          vscode.postMessage({
-            command: 'updateConfig',
-            key: 'audio.beepVolume',
-            value: parseFloat(value)
-          });
-        }
-        
-        function updateSensitivity(value) {
-          document.getElementById('sensitivityValue').textContent = value;
-          currentConfig.recording.wakeWordSensitivity = parseFloat(value);
-          vscode.postMessage({
-            command: 'updateConfig',
-            key: 'recording.wakeWordSensitivity',
-            value: parseFloat(value)
-          });
-        }
-        
-        function updateTimeout(value) {
-          document.getElementById('timeoutValue').textContent = value;
-          currentConfig.recording.timeoutSeconds = parseInt(value);
-          vscode.postMessage({
-            command: 'updateConfig',
-            key: 'recording.timeoutSeconds',
-            value: parseInt(value)
-          });
-        }
-        
-        function updateVoice(voiceId) {
-          currentConfig.audio.ttsVoice = voiceId;
-          vscode.postMessage({
-            command: 'updateConfig',
-            key: 'audio.ttsVoice',
-            value: voiceId
-          });
-          showNotification('Stimme geändert', 'success');
-        }
-        
-        // Performance Metrics
-        ${this.config.debug.performanceMetrics ? `
-        let startTime = 0;
-        let wordCount = 0;
-        
-        function updateMetrics(transcript) {
-          if (startTime > 0) {
-            const latency = Date.now() - startTime;
-            document.getElementById('latency').textContent = latency + 'ms';
-          }
-          
-          wordCount = transcript.split(' ').filter(word => word.length > 0).length;
-          const timeElapsed = (Date.now() - startTime) / 1000 / 60; // minutes
-          const wpm = timeElapsed > 0 ? Math.round(wordCount / timeElapsed) : 0;
-          document.getElementById('words-per-min').textContent = wpm;
-        }
-        ` : ''}
-        
-        // Message handling from extension
-        window.addEventListener('message', event => {
-          const message = event.data;
-          
-          switch (message.command) {
-            case 'showResponse':
-              document.getElementById('response').textContent = message.text;
-              speakResponse(message.text);
-              updateStatus('idle', 'Bereit für nächste Eingabe');
-              break;
-              
-            case 'confirmationRequired':
-              updateStatus('processing', 'Bestätigung erforderlich');
-              showNotification('Bestätigung erforderlich: ' + message.summary, 'warning');
-              speakResponse('Ich habe verstanden: ' + message.summary + '. Soll ich das ausführen?');
-              break;
-              
-            case 'error':
-              updateStatus('error', 'Fehler: ' + message.message);
-              showNotification('Fehler: ' + message.message, 'error');
-              break;
-              
-            case 'configUpdated':
-              currentConfig = message.config;
-              showNotification('Konfiguration aktualisiert', 'success');
-              break;
-          }
-        });
-        
-        // Auto-start
-        setTimeout(() => {
-          if (currentConfig.recording.backgroundListening) {
-            startListening();
-          }
-        }, 1000);
-      </script>
-    </body>
-    </html>`;
+      if (this.config.audio.ttsEnabled) {
+        await this.speakResponse("Aktion abgebrochen.");
+      }
+    }
   }
 
-  private getSpeechRecognitionScript(): string {
-    return `
-    // Speech Recognition Setup
-    if ('webkitSpeechRecognition' in window) {
-      recognition = new webkitSpeechRecognition();
-    } else if ('SpeechRecognition' in window) {
-      recognition = new SpeechRecognition();
+  /**
+   * Generate summary of user input
+   */
+  private async generateSummary(text: string): Promise<string> {
+    const summaryPrompt = `Erstelle eine kurze, klare Zusammenfassung dieser Benutzeranfrage in einem Satz:
+
+"${text}"
+
+Antworten Sie nur mit der Zusammenfassung, ohne zusätzliche Erklärungen.`;
+
+    try {
+      const result = await this.router.route({
+        prompt: summaryPrompt,
+        mode: "speed",
+        metadata: { isVoiceInput: true, type: "summary" }
+      });
+
+      const response = await result.provider.chatComplete(
+        result.modelName,
+        [{ role: "user", content: summaryPrompt }],
+        { maxTokens: 100, temperature: 0.3 }
+      );
+
+      return response.content.trim();
+    } catch (error) {
+      return `Zusammenfassung: ${text.substring(0, 100)}...`;
     }
+  }
+
+  /**
+   * Create voice-optimized prompt
+   */
+  private createVoiceOptimizedPrompt(context: VoiceRoutingContext): string {
+    const basePrompt = context.transcript;
     
-    if (recognition) {
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = currentConfig.language;
-      recognition.maxAlternatives = 3;
-      
-      recognition.onstart = () => {
-        updateStatus('listening', 'Höre auf Wake Words...');
-        if (currentConfig.debug.performanceMetrics) {
-          startTime = Date.now();
-        }
-      };
-      
-      recognition.onresult = (event) => {
-        let transcript = '';
-        let confidence = 0;
-        
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const result = event.results[i];
-          transcript += result[0].transcript;
-          confidence = Math.max(confidence, result[0].confidence || 0);
-        }
-        
-        updateConfidence(confidence);
-        
-        if (currentConfig.debug.performanceMetrics) {
-          updateMetrics(transcript);
-        }
-        
-        // Check for wake words
-        const wakeWords = [currentConfig.wakeWord, ...currentConfig.alternativeWakeWords];
-        const lowerTranscript = transcript.toLowerCase();
-        
-        const wakeWordDetected = wakeWords.some(word => 
-          lowerTranscript.includes(word.toLowerCase())
-        );
-        
-        if (wakeWordDetected && !isRecording) {
-          playBeep();
-          startRecording();
-        }
-        
-        // Check for stop words during recording
-        if (isRecording) {
-          const stopWords = currentConfig.recording.stopWords;
-          const stopWordDetected = stopWords.some(word => 
-            lowerTranscript.includes(word.toLowerCase())
-          );
-          
-          if (stopWordDetected) {
-            stopRecording();
-          }
-        }
-        
-        document.getElementById('transcript').textContent = transcript;
-        
-        // Auto-stop on silence
-        if (isRecording && currentConfig.recording.autoStopOnSilence) {
-          clearTimeout(window.silenceTimeout);
-          window.silenceTimeout = setTimeout(() => {
-            if (isRecording) stopRecording();
-          }, currentConfig.recording.silenceTimeoutMs);
-        }
-      };
-      
-      recognition.onerror = (event) => {
-        console.error('Speech recognition error:', event.error);
-        updateStatus('error', 'Spracherkennungs-Fehler: ' + event.error);
-        showNotification('Spracherkennungs-Fehler: ' + event.error, 'error');
-      };
-      
-      recognition.onend = () => {
-        if (currentConfig.recording.backgroundListening && !isRecording) {
-          setTimeout(startListening, 1000);
-        }
-      };
+    if (!this.config.routing.useVoiceOptimizedPrompts) {
+      return basePrompt;
     }
-    
-    function startListening() {
-      if (recognition && !isRecording) {
-        try {
-          recognition.start();
-          updateStatus('listening', 'Höre auf "' + currentConfig.wakeWord + '"...');
-        } catch (e) {
-          console.error('Failed to start recognition:', e);
-        }
+
+    const languageInstruction = this.config.language.response === 'de' 
+      ? 'deutscher' : 'englischer';
+
+    const voiceOptimizedPrompt = `${basePrompt}
+
+SPRACHSTEUERUNG-KONTEXT:
+- Dies ist eine Spracheingabe über Guido Voice Control
+- Antworten Sie in ${languageInstruction} Sprache
+- Verwenden Sie natürliche, gesprochene Sprache
+- Halten Sie die Antwort unter ${this.config.routing.maxResponseLength} Zeichen
+- Strukturieren Sie klar und verständlich
+- Bei Code: Kurz erklären, dann separat zeigen
+- Vermeiden Sie komplexe technische Details außer explizit gefragt
+
+Persönlichkeit: ${this.config.advanced.personality.style}
+Ausführlichkeit: ${this.config.routing.responseStyle.verbosity}
+Formalität: ${this.config.routing.responseStyle.formality}`;
+
+    return voiceOptimizedPrompt;
+  }
+
+  // Event Handling
+  private setupEventHandlers(): void {
+    // Webview message handling
+    this.webviewProvider.onMessage((message) => {
+      this.handleWebviewMessage(message);
+    });
+
+    // Cleanup on extension deactivation
+    this.context.subscriptions.push({
+      dispose: () => {
+        this.destroy();
       }
+    });
+  }
+
+  private async handleWebviewMessage(message: any): Promise<void> {
+    try {
+      switch (message.command) {
+        case "wakeWordDetected":
+          await this.onWakeWordDetected();
+          break;
+
+        case "recordingStopped":
+          await this.onRecordingStopped(message.transcript, message.confidence);
+          break;
+
+        case "confirmationReceived":
+          await this.onConfirmationReceived(message.confirmed, message.originalText);
+          break;
+
+        case "error":
+          this.handleError("Webview error", new Error(message.error));
+          break;
+
+        case "stateChanged":
+          this.emitEvent({ type: "stateChanged", data: message.state, timestamp: Date.now() });
+          break;
+      }
+    } catch (error) {
+      this.handleError("Message handling failed", error);
+    }
+  }
+
+  // Utility Methods
+  private setState(newState: VoiceState): void {
+    const oldState = this.state;
+    this.state = newState;
+    
+    if (this.currentSession) {
+      this.currentSession.state = newState;
+    }
+
+    this.emitEvent({
+      type: "stateChanged",
+      data: { from: oldState, to: newState },
+      timestamp: Date.now()
+    });
+
+    // Update webview
+    this.webviewProvider.sendMessage({
+      command: "stateChanged",
+      state: newState
+    });
+  }
+
+  private startSession(): void {
+    this.currentSession = {
+      id: this.generateSessionId(),
+      startTime: Date.now(),
+      transcripts: [],
+      responses: [],
+      state: this.state,
+      language: this.config.language.recognition,
+      context: {}
+    };
+
+    this.stats.totalSessions++;
+  }
+
+  private endSession(): void {
+    if (this.currentSession) {
+      this.currentSession.endTime = Date.now();
+      const duration = this.currentSession.endTime - this.currentSession.startTime;
+      this.stats.totalDuration += duration;
+      this.currentSession = undefined;
+    }
+  }
+
+  private clearTimeouts(): void {
+    if (this.recognitionTimeout) {
+      clearTimeout(this.recognitionTimeout);
+      this.recognitionTimeout = undefined;
     }
     
-    function stopListening() {
-      if (recognition) {
-        recognition.stop();
-        updateStatus('idle', 'Gestoppt');
-      }
-      isRecording = false;
+    if (this.confirmationTimeout) {
+      clearTimeout(this.confirmationTimeout);
+      this.confirmationTimeout = undefined;
     }
+  }
+
+  private onRecordingTimeout(): void {
+    this.showNotification("⏰ Aufnahme-Timeout erreicht");
+    this.setState("idle");
+  }
+
+  private onConfirmationTimeout(): void {
+    this.showNotification("⏰ Bestätigung-Timeout erreicht");
+    this.setState("idle");
+  }
+
+  private handleError(context: string, error: any): void {
+    console.error(`Voice Controller Error [${context}]:`, error);
     
-    function startRecording() {
-      isRecording = true;
-      updateStatus('recording', '🔴 Aufnahme läuft - sagen Sie "stop" zum Beenden');
-      
-      if (currentConfig.debug.audioVisualization) {
-        startAudioVisualization();
-      }
-      
-      // Timeout
+    this.stats.errorsCount++;
+    this.setState("error");
+    
+    if (this.config.interface.notifications.showErrors) {
+      this.showNotification(`❌ ${context}: ${error.message}`);
+    }
+
+    // Auto-recovery
+    if (this.config.emergency.errorRecovery.autoRestart) {
       setTimeout(() => {
-        if (isRecording) {
-          stopRecording();
-        }
-      }, currentConfig.recording.timeoutSeconds * 1000);
-      
-      vscode.postMessage({
-        command: 'recordingStarted'
-      });
+        this.recover();
+      }, 2000);
     }
-    
-    function stopRecording() {
-      isRecording = false;
-      updateStatus('processing', 'Verarbeite Eingabe...');
-      
-      if (currentConfig.debug.audioVisualization) {
-        stopAudioVisualization();
-      }
-      
-      const transcript = document.getElementById('transcript').textContent;
-      
-      vscode.postMessage({
-        command: 'recordingStopped',
-        transcript: transcript,
-        confidence: confidence || 0,
-        timestamp: Date.now()
-      });
-    }
-    
-    function playBeep() {
-      if (currentConfig.audio.enableBeep) {
-        const audioCtx = new AudioContext();
-        const oscillator = audioCtx.createOscillator();
-        const gainNode = audioCtx.createGain();
-        
-        oscillator.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-        
-        // Different beep types
-        switch (currentConfig.audio.beepType) {
-          case 'soft':
-            oscillator.frequency.value = 600;
-            break;
-          case 'sharp':
-            oscillator.frequency.value = 1000;
-            break;
-          case 'melody':
-            // Simple melody
-            oscillator.frequency.setValueAtTime(600, audioCtx.currentTime);
-            oscillator.frequency.setValueAtTime(800, audioCtx.currentTime + 0.1);
-            break;
-          default:
-            oscillator.frequency.value = 800;
-        }
-        
-        gainNode.gain.value = currentConfig.audio.beepVolume;
-        
-        oscillator.start();
-        oscillator.stop(audioCtx.currentTime + 0.2);
-      }
-    }
-    
-    function speakResponse(text) {
-      if (currentConfig.audio.ttsEnabled && synthesis) {
-        // Filter out code blocks
-        if (currentConfig.routing.skipCodeInTTS) {
-          text = text.replace(/\`\`\`[\\s\\S]*?\`\`\`/g, '[Code-Block]');
-          text = text.replace(/\`[^`]*\`/g, '[Code]');
-        }
-        
-        // Limit length
-        if (text.length > currentConfig.routing.maxResponseLength) {
-          text = text.substring(0, currentConfig.routing.maxResponseLength) + '... Antwort gekürzt für Sprachausgabe.';
-        }
-        
-        // Simple language processing
-        if (currentConfig.routing.useSimpleLanguage) {
-          text = text.replace(/\\b(jedoch|allerdings|dementsprechend)\\b/g, 'aber');
-          text = text.replace(/\\b(implementieren|realisieren)\\b/g, 'umsetzen');
-        }
-        
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = currentConfig.language;
-        utterance.rate = currentConfig.audio.ttsSpeed;
-        utterance.volume = currentConfig.audio.ttsVolume;
-        utterance.pitch = currentConfig.audio.ttsPitch;
-        
-        // Voice selection
-        if (currentConfig.audio.ttsVoice !== 'auto') {
-          const voices = synthesis.getVoices();
-          const selectedVoice = voices.find(voice => voice.name === currentConfig.audio.ttsVoice);
-          if (selectedVoice) {
-            utterance.voice = selectedVoice;
-          }
-        }
-        
-        utterance.onstart = () => {
-          updateStatus('processing', '🗣️ Spreche Antwort...');
-        };
-        
-        utterance.onend = () => {
-          updateStatus('idle', 'Bereit für nächste Eingabe');
-        };
-        
-        synthesis.speak(utterance);
-      }
-    }`;
   }
 
-  private getAudioVisualizationScript(): string {
-    return `
-    function startAudioVisualization() {
-      navigator.mediaDevices.getUserMedia({ audio: true })
-        .then(stream => {
-          audioContext = new AudioContext();
-          analyser = audioContext.createAnalyser();
-          const source = audioContext.createMediaStreamSource(stream);
-          
-          source.connect(analyser);
-          analyser.fftSize = 256;
-          
-          const bufferLength = analyser.frequencyBinCount;
-          dataArray = new Uint8Array(bufferLength);
-          
-          const visualizer = document.getElementById('visualizer');
-          visualizer.innerHTML = '';
-          
-          for (let i = 0; i < 32; i++) {
-            const bar = document.createElement('div');
-            bar.className = 'wave-bar';
-            bar.style.left = (i * 8) + 'px';
-            visualizer.appendChild(bar);
-          }
-          
-          animate();
-        })
-        .catch(err => console.error('Audio visualization error:', err));
+  private async recover(): Promise<void> {
+    try {
+      this.clearTimeouts();
+      this.endSession();
+      this.setState("idle");
+      
+      if (this.config.emergency.fallbackToText) {
+        this.showNotification("🔄 Wechsel zu Text-Chat-Modus");
+        vscode.commands.executeCommand("modelRouter.chat");
+      } else {
+        await this.startListening();
+      }
+    } catch (error) {
+      console.error("Recovery failed:", error);
+    }
+  }
+
+  private showNotification(message: string): void {
+    if (this.config.interface.notifications.playAudioNotifications) {
+      this.audioManager.playNotificationSound("info");
     }
     
-    function animate() {
-      if (!isRecording) return;
-      
-      animationId = requestAnimationFrame(animate);
-      
-      analyser.getByteFrequencyData(dataArray);
-      
-      const bars = document.querySelectorAll('.wave-bar');
-      bars.forEach((bar, i) => {
-        const height = (dataArray[i * 8] / 255) * 60;
-        bar.style.height = height + 'px';
+    vscode.window.showInformationMessage(message);
+  }
+
+  // Public API
+  async destroy(): Promise<void> {
+    try {
+      await this.stopListening();
+      this.clearTimeouts();
+      this.endSession();
+      await this.audioManager.destroy();
+      await this.webviewProvider.destroy();
+      this.eventListeners.clear();
+    } catch (error) {
+      console.error("Voice controller cleanup failed:", error);
+    }
+  }
+
+  getState(): VoiceState {
+    return this.state;
+  }
+
+  getStats(): VoiceStats {
+    return { ...this.stats };
+  }
+
+  getCurrentSession(): VoiceSession | undefined {
+    return this.currentSession;
+  }
+
+  // Event System
+  addEventListener(eventType: string, listener: (event: VoiceEvent) => void): void {
+    if (!this.eventListeners.has(eventType)) {
+      this.eventListeners.set(eventType, []);
+    }
+    this.eventListeners.get(eventType)!.push(listener);
+  }
+
+  removeEventListener(eventType: string, listener: (event: VoiceEvent) => void): void {
+    const listeners = this.eventListeners.get(eventType);
+    if (listeners) {
+      const index = listeners.indexOf(listener);
+      if (index > -1) {
+        listeners.splice(index, 1);
+      }
+    }
+  }
+
+  private emitEvent(event: VoiceEvent): void {
+    const listeners = this.eventListeners.get(event.type);
+    if (listeners) {
+      listeners.forEach(listener => {
+        try {
+          listener(event);
+        } catch (error) {
+          console.error("Event listener error:", error);
+        }
       });
     }
+  }
+
+  // Helper methods
+  private initializeStats(): VoiceStats {
+    return {
+      totalSessions: 0,
+      totalDuration: 0,
+      averageSessionDuration: 0,
+      recognitionAccuracy: 0,
+      commandsExecuted: 0,
+      errorsCount: 0,
+      mostUsedCommands: [],
+      languageUsage: {} as any,
+      responseTime: {
+        average: 0,
+        p95: 0,
+        p99: 0
+      }
+    };
+  }
+
+  private generateSessionId(): string {
+    return `voice_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  private getUserPreferences(): Record<string, any> {
+    // Load from VS Code settings or local storage
+    return {};
+  }
+
+  private async getEnvironmentContext(): Promise<any> {
+    const editor = vscode.window.activeTextEditor;
+    return {
+      currentFile: editor?.document.fileName,
+      selectedText: editor?.document.getText(editor.selection),
+      workspaceLanguage: editor?.document.languageId,
+      openTabs: vscode.window.tabGroups.all.flatMap(group => 
+        group.tabs.map(tab => (tab.input as any)?.uri?.fsPath).filter(Boolean)
+      )
+    };
+  }
+
+  private shouldRequireConfirmation(text: string): boolean {
+    if (!this.config.confirmation.required) {
+      return false;
+    }
+
+    if (this.config.confirmation.smartConfirmation) {
+      // Use AI to determine if confirmation is needed
+      const dangerousKeywords = ["delete", "remove", "drop", "truncate", "format", "reset"];
+      return dangerousKeywords.some(keyword => 
+        text.toLowerCase().includes(keyword)
+      );
+    }
+
+    return true;
+  }
+
+  private isWithinWorkingHours(): boolean {
+    if (!this.config.permissions.workingHours.enabled) {
+      return true;
+    }
+
+    const now = new Date();
+    const currentTime = now.getHours() * 60 + now.getMinutes();
+    const isWeekend = now.getDay() === 0 || now.getDay() === 6;
+
+    if (isWeekend && !this.config.permissions.workingHours.allowWeekends) {
+      return false;
+    }
+
+    const [startHour, startMin] = this.config.permissions.workingHours.startTime.split(':').map(Number);
+    const [endHour, endMin] = this.config.permissions.workingHours.endTime.split(':').map(Number);
     
-    function stopAudioVisualization() {
-      if (animationId) {
-        cancelAnimationFrame(animationId);
-      }
-      if (audioContext) {
-        audioContext.close();
-      }
-    }`;
+    const startTime = startHour * 60 + startMin;
+    const endTime = endHour * 60 + endMin;
+
+    return currentTime >= startTime && currentTime <= endTime;
   }
 
-  private getVoiceOptions(): string {
-    const voices = this.config.voices[this.config.language] || [];
-    return voices.map(voice => 
-      `<option value="${voice.name}">${voice.name} (${voice.gender}, ${voice.style})</option>`
-    ).join('');
+  private getLanguageFromContext(context: VoiceRoutingContext): string {
+    return context.environmentContext.workspaceLanguage || 'typescript';
   }
 
-  private getCommandsList(): string {
-    const allCommands = [
-      ...this.config.commands.system,
-      ...this.config.commands.voice,
-      ...this.config.commands.content,
-      ...this.config.commands.navigation
+  private calculateMaxTokens(): number {
+    return Math.max(100, Math.min(500, this.config.routing.maxResponseLength / 3));
+  }
+
+  private updateStats(response: VoiceResponse): void {
+    this.stats.commandsExecuted++;
+    
+    // Update response time statistics
+    const responseTime = response.metadata.duration;
+    this.stats.responseTime.average = 
+      (this.stats.responseTime.average * (this.stats.commandsExecuted - 1) + responseTime) / 
+      this.stats.commandsExecuted;
+  }
+
+  private async registerDefaultCommands(): Promise<void> {
+    // Register built-in voice commands
+    const defaultCommands: VoiceCommandHandler[] = [
+      {
+        id: "system.mute",
+        patterns: ["mikrofon stumm", "mute", "stumm schalten"],
+        languages: ["de-DE", "en-US"],
+        handler: async () => {
+          await this.audioManager.mute();
+          return {
+            text: "Mikrofon stummgeschaltet",
+            shouldSpeak: false,
+            metadata: { model: "system", provider: "system", cost: 0, duration: 0, tokens: { input: 0, output: 0 } }
+          };
+        },
+        permissions: ["audioControl"],
+        description: "Mikrofon stummschalten",
+        examples: ["Mikrofon stumm", "mute"]
+      },
+      {
+        id: "system.unmute",
+        patterns: ["mikrofon an", "unmute", "mikrofon aktivieren"],
+        languages: ["de-DE", "en-US"],
+        handler: async () => {
+          await this.audioManager.unmute();
+          return {
+            text: "Mikrofon aktiviert",
+            shouldSpeak: true,
+            metadata: { model: "system", provider: "system", cost: 0, duration: 0, tokens: { input: 0, output: 0 } }
+          };
+        },
+        permissions: ["audioControl"],
+        description: "Mikrofon aktivieren",
+        examples: ["Mikrofon an", "unmute"]
+      }
     ];
 
-    return allCommands.map(cmd => `
-      <div class="command-item">
-        <div class="command-trigger">"${cmd.trigger.join('" oder "')}"</div>
-        <div class="command-desc">${this.getCommandDescription(cmd.action)}</div>
-      </div>
-    `).join('');
-  }
-
-  private getCommandDescription(action: string): string {
-    const descriptions: Record<string, string> = {
-      'switchMode': 'Wechselt den Router-Modus',
-      'showBudget': 'Zeigt die Kostenübersicht',
-      'testProviders': 'Testet Provider-Verbindungen',
-      'openConfig': 'Öffnet die Konfigurationsdatei',
-      'decreaseVolume': 'Verringert die Lautstärke',
-      'increaseVolume': 'Erhöht die Lautstärke',
-      'cycleVoice': 'Wechselt die TTS-Stimme',
-      'cycleLanguage': 'Wechselt die Sprache',
-      'explainCode': 'Erklärt den ausgewählten Code',
-      'optimizeCode': 'Optimiert den ausgewählten Code',
-      'writeTests': 'Schreibt Tests für die Datei',
-      'generateDocs': 'Generiert Dokumentation',
-      'refactorCode': 'Refaktoriert den Code',
-      'openFile': 'Öffnet eine Datei',
-      'openTerminal': 'Öffnet das Terminal',
-      'showProblems': 'Zeigt Probleme an',
-      'globalSearch': 'Startet eine globale Suche'
-    };
-    
-    return descriptions[action] || `Führt ${action} aus`;
-  }
-
-  private setupWebviewMessageHandling(): void {
-    this.webviewPanel!.webview.onDidReceiveMessage(async (message) => {
-      try {
-        switch (message.command) {
-          case 'recordingStarted':
-            await this.handleRecordingStarted();
-            break;
-            
-          case 'recordingStopped':
-            await this.handleRecordingStopped(message.transcript, message.confidence, message.timestamp);
-            break;
-            
-          case 'updateConfig':
-            await this.handleConfigUpdate(message.key, message.value);
-            break;
-            
-          default:
-            this.log(`Unknown webview message: ${message.command}`);
-        }
-      } catch (error) {
-        this.log(`Error handling webview message: ${error.message}`);
-        this.sendToWebview({
-          command: 'error',
-          message: error.message
-        });
-      }
-    });
-  }
-
-  private async handleRecordingStarted(): Promise<void> {
-    this.currentSession = {
-      id: Date.now().toString(),
-      startTime: new Date(),
-      isActive: true,
-      transcript: '',
-      confidence: 0,
-      language: this.config.language
-    };
-
-    this.log('Recording started', { sessionId: this.currentSession.id });
-  }
-
-  private async handleRecordingStopped(transcript: string, confidence: number, timestamp: number): Promise<void> {
-    if (!this.currentSession) {
-      throw new Error('No active session');
-    }
-
-    this.currentSession.transcript = transcript;
-    this.currentSession.confidence = confidence;
-    this.currentSession.isActive = false;
-
-    this.log('Recording stopped', { 
-      sessionId: this.currentSession.id, 
-      transcript: transcript.substring(0, 100),
-      confidence 
-    });
-
-    // Process the voice input
-    const response = await this.commandProcessor.processVoiceInput(transcript, this.currentSession);
-    
-    // Add to conversation history
-    if (this.config.advanced.contextMemory) {
-      this.conversationHistory.push(transcript);
-      if (this.conversationHistory.length > this.config.advanced.conversationHistory) {
-        this.conversationHistory.shift();
-      }
-    }
-
-    this.sendToWebview({
-      command: 'showResponse',
-      text: response
-    });
-  }
-
-  private async handleConfigUpdate(key: string, value: any): Promise<void> {
-    // Update local config
-    const keys = key.split('.');
-    let current = this.config as any;
-    
-    for (let i = 0; i < keys.length - 1; i++) {
-      current = current[keys[i]];
-    }
-    current[keys[keys.length - 1]] = value;
-
-    this.log('Config updated', { key, value });
-
-    // Persist to file (optional)
-    // await this.saveConfigToFile();
-
-    this.sendToWebview({
-      command: 'configUpdated',
-      config: this.config
-    });
-  }
-
-  private sendToWebview(message: any): void {
-    if (this.webviewPanel) {
-      this.webviewPanel.webview.postMessage(message);
-    }
-  }
-
-  private updateStatus(type: string, message: string): void {
-    this.sendToWebview({
-      command: 'updateStatus',
-      type,
-      message
-    });
-  }
-
-  private async speak(text: string): Promise<void> {
-    return this.audioManager.speak(text, this.config.audio);
-  }
-
-  private getGreeting(): string {
-    const hour = new Date().getHours();
-    const personality = this.config.advanced.personality;
-    
-    const greetings = {
-      professional: {
-        morning: "Guten Morgen! Guido ist bereit für Ihre Anfragen.",
-        afternoon: "Guten Tag! Wie kann ich Ihnen helfen?",
-        evening: "Guten Abend! Ich stehe für Ihre Fragen bereit."
-      },
-      friendly: {
-        morning: "Hallo! Schön, dass Sie da sind. Was kann ich heute für Sie tun?",
-        afternoon: "Hi! Bereit für neue Herausforderungen?",
-        evening: "Hallo! Auch am Abend noch produktiv? Wie kann ich helfen?"
-      },
-      casual: {
-        morning: "Moin! Auf geht's!",
-        afternoon: "Hey! Was steht an?",
-        evening: "Hi! Noch am Coden?"
-      }
-    };
-
-    const timeOfDay = hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening';
-    return greetings[personality]?.[timeOfDay] || "Hallo! Ich bin Guido, Ihr Sprach-Assistent.";
-  }
-
-  private setupEventListeners(): void {
-    // VSCode window state changes
-    vscode.window.onDidChangeActiveTextEditor((editor) => {
-      if (this.config.routing.contextAware && this.currentSession?.isActive) {
-        this.currentSession.context = {
-          fileName: editor?.document.fileName,
-          language: editor?.document.languageId,
-          lineCount: editor?.document.lineCount
-        };
-      }
-    });
-  }
-
-  private loadAuditLog(): void {
-    if (!this.config.permissions.auditLog) return;
-
-    try {
-      const logPath = path.resolve(this.config.permissions.auditLogPath);
-      if (fs.existsSync(logPath)) {
-        const logData = fs.readFileSync(logPath, 'utf8');
-        this.auditLog = JSON.parse(logData);
-      }
-    } catch (error) {
-      console.warn('Failed to load audit log:', error);
-    }
-  }
-
-  private log(action: string, details?: any): void {
-    if (this.config.debug.verboseLogging) {
-      console.log(`[VoiceController] ${action}:`, details);
-    }
-
-    if (this.config.permissions.auditLog) {
-      this.auditLog.push({
-        timestamp: new Date(),
-        action,
-        details
-      });
-
-      // Trim log if too large
-      if (this.auditLog.length > this.config.permissions.maxAuditEntries) {
-        this.auditLog = this.auditLog.slice(-this.config.permissions.maxAuditEntries);
-      }
-
-      // Save to file
-      this.saveAuditLog();
-    }
-  }
-
-  private saveAuditLog(): void {
-    try {
-      const logPath = path.resolve(this.config.permissions.auditLogPath);
-      fs.writeFileSync(logPath, JSON.stringify(this.auditLog, null, 2));
-    } catch (error) {
-      console.warn('Failed to save audit log:', error);
+    for (const command of defaultCommands) {
+      this.commandProcessor.registerHandler(command);
     }
   }
 }
