@@ -21,9 +21,7 @@
     "cost-aware"
   ],
   "activationEvents": [
-    "onStartupFinished",
-    "onCommand:modelRouter.chat",
-    "onCommand:modelRouter.setApiKey"
+    "onStartupFinished"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -64,6 +62,16 @@
           "enum": ["compact", "detailed"],
           "default": "compact",
           "description": "Anzeigeformat für Budget (compact: Tagesbudget, detailed: Tag & Monat)"
+        },
+        "modelRouter.chat.compactMode": {
+          "type": "boolean",
+          "default": false,
+          "description": "Kompaktmodus: kein Panel automatisch, Quick Prompt Command verwenden"
+        },
+        "modelRouter.chat.persistHistory": {
+          "type": "boolean",
+          "default": true,
+          "description": "Chatverlauf (letzte 1000 Nachrichten) zwischen Sessions speichern"
         }
       }
     },
@@ -72,6 +80,11 @@
         "command": "modelRouter.chat",
         "title": "Model Router: Chat",
         "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "modelRouter.openChatUI",
+        "title": "Model Router: Open Chat UI",
+        "icon": "$(terminal)"
       },
       {
         "command": "modelRouter.routeOnce",
@@ -127,46 +140,79 @@
         "command": "modelRouter.voicePermissions",
         "title": "Model Router: Voice Permissions & Privacy",
         "icon": "$(shield)"
+      },
+      {
+        "command": "modelRouter.chat.quickPrompt",
+        "title": "Model Router: Quick Prompt (Kompaktmodus)",
+        "icon": "$(comment)"
+      },
+      {
+        "command": "modelRouter.chat.tools",
+        "title": "Model Router: Chat Tools",
+        "icon": "$(tools)"
+      },
+      {
+        "command": "modelRouter.chat.planCurrent",
+        "title": "Model Router: Plan / Agent aus letztem Prompt",
+        "icon": "$(rocket)"
       }
     ],
     "menus": {
       "commandPalette": [
         {
-          "command": "modelRouter.chat"
+          "command": "modelRouter.chat",
+          "icon": "$(comment-discussion)"
         },
         {
-          "command": "modelRouter.routeOnce"
+          "command": "modelRouter.routeOnce",
+          "icon": "$(search)"
         },
         {
-          "command": "modelRouter.setApiKey"
+          "command": "modelRouter.setApiKey",
+          "icon": "$(key)"
         },
         {
-          "command": "modelRouter.switchMode"
+          "command": "modelRouter.switchMode",
+          "icon": "$(settings-gear)"
         },
         {
-          "command": "modelRouter.openConfig"
+          "command": "modelRouter.openConfig",
+          "icon": "$(edit)"
         },
         {
-          "command": "modelRouter.showCosts"
+          "command": "modelRouter.showCosts",
+          "icon": "$(graph)"
         },
         {
-          "command": "modelRouter.testConnection"
+          "command": "modelRouter.testConnection",
+          "icon": "$(plug)"
         },
         {
-          "command": "modelRouter.startVoiceControl"
+          "command": "modelRouter.startVoiceControl",
+          "icon": "$(mic)"
         },
         {
-          "command": "modelRouter.stopVoiceControl"
+          "command": "modelRouter.stopVoiceControl",
+          "icon": "$(mic-off)"
         },
         {
-          "command": "modelRouter.toggleVoiceControl"
+          "command": "modelRouter.toggleVoiceControl",
+          "icon": "$(mic-filled)"
         },
         {
-          "command": "modelRouter.voiceSettings"
+          "command": "modelRouter.voiceSettings",
+          "icon": "$(settings-gear)"
         },
         {
-          "command": "modelRouter.voicePermissions"
-        }
+          "command": "modelRouter.voicePermissions",
+          "icon": "$(shield)"
+        },
+        {
+          "command": "modelRouter.chat.quickPrompt",
+          "icon": "$(comment)"
+        },
+  { "command": "modelRouter.chat.tools", "icon": "$(tools)" },
+  { "command": "modelRouter.chat.planCurrent", "icon": "$(rocket)" }
       ]
     },
     "views": {
@@ -176,6 +222,12 @@
           "id": "guidoVoiceControl",
           "name": "🎤 Guido Voice Control",
           "when": "config.modelRouter.voice.enabled"
+        },
+        {
+          "type": "webview",
+          "id": "modelRouterChatDock",
+          "name": "💬 Model Router Chat (Dock)",
+          "when": "false"
         }
       ]
     }
@@ -187,7 +239,8 @@
     "pretest": "npm run compile",
   "test": "node --test ./out/test/**/*.js",
     "package": "vsce package",
-    "lint": "eslint src --ext ts"
+  "lint": "eslint src --ext ts",
+  "docs:toc": "node scripts/generateToc.mjs"
   },
   "devDependencies": {
     "@types/dom-speech-recognition": "^0.0.6",

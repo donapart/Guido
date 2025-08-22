@@ -13,15 +13,58 @@ export interface ChatOptions {
   maxTokens?: number;
   temperature?: number;
   json?: boolean;
-  toolsJsonSchema?: any;
+  /** OpenAI style tool schema array or provider specific structure */
+  toolsJsonSchema?: unknown;
   signal?: AbortSignal;
 }
 
-export interface ChatStreamChunk {
-  type: "text" | "tool" | "done" | "error";
-  data?: string | any;
-  error?: string;
+// ---- Streaming Chunk Types (discriminated union) ----
+
+export interface ChatStreamTextChunk {
+  type: "text";
+  data: string; // streamed text delta
 }
+
+export interface ChatStreamToolCallFunction {
+  name: string;
+  description?: string;
+  arguments?: string; // raw JSON string for OpenAI style
+}
+
+export interface ChatStreamToolCall {
+  id?: string;
+  type: string; // e.g. "function"
+  function?: ChatStreamToolCallFunction;
+  // provider specific extra fields are allowed via index signature
+  [k: string]: unknown;
+}
+
+export interface ChatStreamToolChunk {
+  type: "tool";
+  data: ChatStreamToolCall[]; // one or more tool calls (delta or full)
+}
+
+export interface ChatStreamDoneInfo {
+  usage?: TokenUsage;
+  finishReason?: "stop" | "length" | "tool_calls" | "cancelled" | string;
+  performance?: Record<string, unknown>; // provider specific timings
+}
+
+export interface ChatStreamDoneChunk {
+  type: "done";
+  data?: ChatStreamDoneInfo;
+}
+
+export interface ChatStreamErrorChunk {
+  type: "error";
+  error: string;
+}
+
+export type ChatStreamChunk =
+  | ChatStreamTextChunk
+  | ChatStreamToolChunk
+  | ChatStreamDoneChunk
+  | ChatStreamErrorChunk;
 
 export interface TokenUsage {
   inputTokens: number;
@@ -150,7 +193,14 @@ export abstract class BaseProvider implements Provider {
           case "done":
             if (chunk.data && typeof chunk.data === "object") {
               usage = chunk.data.usage;
-              finishReason = chunk.data.finishReason || "stop";
+              // accept unknown finish reasons but coerce to allowed union where possible
+              const fr = chunk.data.finishReason;
+              if (fr === "stop" || fr === "length" || fr === "tool_calls" || fr === "cancelled" || fr === undefined) {
+                finishReason = fr ?? "stop";
+              } else {
+                // preserve as string but cast (extension for forward compatibility)
+                finishReason = fr as ChatResult["finishReason"]; // fallback
+              }
             }
             break;
           case "error":

@@ -39,6 +39,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
+const fs = __importStar(require("fs"));
+const path = __importStar(require("path"));
 const config_1 = require("./config");
 const server_1 = require("./mcp/server");
 const price_1 = require("./price");
@@ -50,6 +52,8 @@ const secret_1 = require("./secret");
 const voiceController_1 = require("./voice/voiceController");
 let state;
 let extensionContext;
+// Einfache Chat-History im Speicher (persistenz optional später)
+const chatHistory = []; // eslint-disable-line @typescript-eslint/no-explicit-any
 async function activate(context) {
     console.log("Aktiviere Model Router Extension...");
     // Store extension context globally
@@ -109,6 +113,152 @@ function deactivate() {
 function registerCommands(context) {
     const commands = [
         vscode.commands.registerCommand("modelRouter.chat", handleChatCommand),
+        vscode.commands.registerCommand("modelRouter.openChatUI", () => {
+            try {
+                const extUri = extensionContext.extensionUri;
+                const { ChatPanel } = require('./webview/chatPanel');
+                ChatPanel.createOrShow(extUri);
+                // Modelle & History an Webview senden
+                const panel = ChatPanel.current;
+                if (panel && state.router) {
+                    try {
+                        const profile = state.router.getProfile();
+                        const models = [];
+                        for (const prov of profile.providers) {
+                            for (const m of prov.models) {
+                                if (!models.includes(m.name))
+                                    models.push(m.name);
+                            }
+                        }
+                        panel.sendModels(models.sort());
+                        panel.sendHistory(chatHistory.slice(-200));
+                    }
+                    catch { /* ignore */ }
+                }
+            }
+            catch (e) {
+                vscode.window.showErrorMessage(`Chat UI Fehler: ${e instanceof Error ? e.message : String(e)}`);
+            }
+        }),
+        vscode.commands.registerCommand('modelRouter.chat.sendFromWebview', async (text, modelOverride, attachmentUris) => {
+            if (!state.router) {
+                vscode.window.showErrorMessage('Router nicht initialisiert');
+                return;
+            }
+            const { ChatPanel } = require('./webview/chatPanel');
+            const panel = ChatPanel.current;
+            if (!panel)
+                return;
+            try {
+                const ctx = { prompt: text, mode: state.currentMode }; // eslint-disable-line @typescript-eslint/no-explicit-any
+                let providerToUse;
+                let modelName;
+                let modelPrice; // eslint-disable-line @typescript-eslint/no-explicit-any
+                let providerId;
+                let routed; // eslint-disable-line @typescript-eslint/no-explicit-any
+                if (modelOverride) {
+                    const profile = state.router.getProfile();
+                    const provCfg = profile.providers.find(p => p.models.some(m => m.name === modelOverride));
+                    if (provCfg) {
+                        providerId = provCfg.id;
+                        providerToUse = state.providers.get(provCfg.id);
+                        modelName = modelOverride;
+                        modelPrice = provCfg.models.find(m => m.name === modelOverride)?.price;
+                        panel.sendInfo(`Override Modell: ${providerId}:${modelName}`);
+                    }
+                }
+                if (!providerToUse) {
+                    routed = await state.router.route(ctx);
+                    providerToUse = routed.provider;
+                    modelName = routed.modelName;
+                    modelPrice = routed.model.price;
+                    providerId = routed.providerId;
+                }
+                // --- Attachments Verarbeitung ---
+                let attachmentNote = '';
+                if (attachmentUris && attachmentUris.length) {
+                    const summaries = await readAttachmentSummaries(attachmentUris);
+                    if (summaries.length) {
+                        attachmentNote = '\n\n[Anhänge]\n' + summaries.map(s => `### ${s.name}\n${s.snippet}`).join('\n');
+                    }
+                }
+                const fullPrompt = text + attachmentNote;
+                // Kosten-Schätzung vorab
+                if (providerToUse && modelName && modelPrice) {
+                    try {
+                        const est = price_1.PriceCalculator.estimateCost(fullPrompt, { price: modelPrice }, modelName); // eslint-disable-line @typescript-eslint/no-explicit-any
+                        panel.sendInfo(`Geschätzte Kosten: $${est.totalCost.toFixed(4)} (Tokens ~${est.inputTokens})`);
+                    }
+                    catch { /* ignore */ }
+                }
+                if (!providerToUse || !modelName) {
+                    throw new Error('Kein Modell/Provider bestimmt');
+                }
+                let contentAccum = '';
+                for await (const chunk of providerToUse.chat(modelName, [{ role: 'user', content: fullPrompt }])) {
+                    if (chunk.type === 'text' && chunk.data) {
+                        contentAccum += chunk.data;
+                        panel.streamDelta(chunk.data);
+                    }
+                    else if (chunk.type === 'done') {
+                        if (chunk.data?.usage && modelPrice && providerId && modelName) {
+                            try {
+                                const actualCost = price_1.PriceCalculator.calculateActualCost(chunk.data.usage, modelPrice, modelName, providerId);
+                                await state.budgetManager.recordTransaction(providerId, modelName, actualCost.totalCost, actualCost.inputTokens, actualCost.outputTokens);
+                                panel.streamDone({ usage: chunk.data.usage, cost: actualCost });
+                            }
+                            catch {
+                                panel.streamDone({ usage: chunk.data.usage });
+                            }
+                        }
+                        else {
+                            panel.streamDone();
+                        }
+                        break;
+                    }
+                    else if (chunk.type === 'error') {
+                        panel.showError(chunk.error || 'Unbekannter Fehler');
+                        break;
+                    }
+                }
+                chatHistory.push({ role: 'user', content: text, meta: { attachments: attachmentUris, override: modelOverride } });
+                chatHistory.push({ role: 'assistant', content: contentAccum, meta: { providerId, modelName } });
+                if (chatHistory.length > 1000)
+                    chatHistory.splice(0, chatHistory.length - 1000);
+            }
+            catch (err) {
+                const { ChatPanel } = require('./webview/chatPanel');
+                ChatPanel.current?.showError(err instanceof Error ? err.message : String(err));
+            }
+        }),
+        vscode.commands.registerCommand('modelRouter.chat.tools', async () => {
+            vscode.window.showInformationMessage('Tools UI noch nicht implementiert.');
+        }),
+        vscode.commands.registerCommand('modelRouter.chat.planCurrent', async () => {
+            vscode.window.showInformationMessage('Plan / Agent Placeholder.');
+        }),
+        vscode.commands.registerCommand('modelRouter.chat.quickPrompt', async () => {
+            const cfg = vscode.workspace.getConfiguration('modelRouter');
+            const compact = cfg.get('chat.compactMode', false);
+            if (!compact) {
+                vscode.commands.executeCommand('modelRouter.openChatUI');
+                return;
+            }
+            const text = await vscode.window.showInputBox({ prompt: 'Chat Prompt eingeben' });
+            if (!text)
+                return;
+            if (!state.router) {
+                vscode.window.showErrorMessage('Router nicht initialisiert');
+                return;
+            }
+            // Falls Panel geöffnet -> dort streamen, sonst nur OutputChannel
+            const { ChatPanel } = require('./webview/chatPanel');
+            if (!ChatPanel.current) {
+                state.outputChannel.show(true);
+                state.outputChannel.appendLine(`> ${text}`);
+            }
+            vscode.commands.executeCommand('modelRouter.chat.sendFromWebview', text);
+        }),
         vscode.commands.registerCommand("modelRouter.routeOnce", handleRouteOnceCommand),
         vscode.commands.registerCommand("modelRouter.setApiKey", handleSetApiKeyCommand),
         vscode.commands.registerCommand("modelRouter.switchMode", handleSwitchModeCommand),
@@ -164,6 +314,19 @@ async function loadConfiguration() {
         // Initialize voice control if enabled
         if (profile.voice?.enabled) {
             await initializeVoiceControl(profile.voice);
+            // Voice State -> Chat Panel Bridge
+            if (state.voiceController) {
+                state.voiceController.addEventListener('stateChanged', (ev) => {
+                    try {
+                        const { ChatPanel } = require('./webview/chatPanel');
+                        if (ChatPanel.current) {
+                            const newState = typeof ev.data === 'string' ? ev.data : ev.data?.to?.toString?.() || 'idle';
+                            ChatPanel.current.sendVoiceState?.(newState);
+                        }
+                    }
+                    catch { /* ignore */ }
+                });
+            }
         }
         state.outputChannel.appendLine(`Konfiguration geladen: ${profile.providers.length} Provider, Modus: ${profile.mode}${profile.voice?.enabled ? ', Voice: aktiv' : ''}`);
         await updateStatusBar();
@@ -828,5 +991,29 @@ Letzte Aktualisierung: ${new Date().toLocaleString('de-DE')}`;
             vscode.window.showInformationMessage("📤 Voice Control Daten exportiert");
             break;
     }
+}
+async function readAttachmentSummaries(paths) {
+    const maxFiles = 5;
+    const maxBytesPerFile = 8 * 1024; // 8KB pro Datei (Preview)
+    const results = [];
+    for (const p of paths.slice(0, maxFiles)) {
+        try {
+            const stat = fs.statSync(p);
+            if (stat.isDirectory())
+                continue;
+            if (stat.size > 512 * 1024) { // >512KB überspringen
+                results.push({ name: path.basename(p), snippet: '[Übersprungen: Datei zu groß]' });
+                continue;
+            }
+            const buf = fs.readFileSync(p);
+            const slice = buf.slice(0, maxBytesPerFile).toString('utf8');
+            const cleaned = slice.replace(/\u0000/g, '').replace(/\s+$/, '');
+            results.push({ name: path.basename(p), snippet: cleaned });
+        }
+        catch {
+            // ignore
+        }
+    }
+    return results;
 }
 //# sourceMappingURL=extension.js.map

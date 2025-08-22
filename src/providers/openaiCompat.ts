@@ -4,15 +4,16 @@
  */
 
 import {
-    AuthenticationError,
-    BaseProvider,
-    ChatMessage,
-    ChatOptions,
-    ChatStreamChunk,
-    ProviderConfig,
-    ProviderError,
-    RateLimitError,
-    TokenUsage,
+  AuthenticationError,
+  BaseProvider,
+  ChatMessage,
+  ChatOptions,
+  ChatStreamChunk,
+  ChatStreamToolCall,
+  ProviderConfig,
+  ProviderError,
+  RateLimitError,
+  TokenUsage,
 } from "./base";
 
 export interface OpenAICompatConfig extends ProviderConfig {
@@ -33,8 +34,15 @@ export interface OpenAIRequest {
   temperature?: number;
   stream?: boolean;
   response_format?: { type: "json_object" };
-  tools?: any[];
-  tool_choice?: string | object;
+  tools?: Array<{
+    type: string; // "function"
+    function: {
+      name: string;
+      description?: string;
+      parameters?: unknown; // raw JSON schema
+    };
+  }>;
+  tool_choice?: string | { type: string; function?: { name: string } };
 }
 
 export interface OpenAIResponse {
@@ -47,12 +55,20 @@ export interface OpenAIResponse {
     message?: {
       role: string;
       content: string;
-      tool_calls?: any[];
+      tool_calls?: Array<{
+        id?: string;
+        type: string;
+        function?: { name: string; arguments?: string };
+      }>;
     };
     delta?: {
       role?: string;
       content?: string;
-      tool_calls?: any[];
+      tool_calls?: Array<{
+        id?: string;
+        type: string;
+        function?: { name: string; arguments?: string };
+      }>;
     };
     finish_reason?: "stop" | "length" | "tool_calls" | "content_filter";
   }>;
@@ -127,8 +143,11 @@ export class OpenAICompatProvider extends BaseProvider {
     }
 
     if (opts.toolsJsonSchema) {
-      request.tools = opts.toolsJsonSchema;
-      request.tool_choice = "auto";
+      // Accept user supplied schema array; perform minimal shape validation
+      if (Array.isArray(opts.toolsJsonSchema)) {
+        request.tools = opts.toolsJsonSchema as OpenAIRequest["tools"];
+        request.tool_choice = "auto";
+      }
     }
 
     try {
@@ -236,7 +255,7 @@ export class OpenAICompatProvider extends BaseProvider {
     let errorMessage = `HTTP ${response.status}`;
     
     try {
-      const errorData = await response.json() as any;
+  const errorData = await response.json() as { error?: { message?: string } };
       if (errorData.error?.message) {
         errorMessage = errorData.error.message;
       }
@@ -306,8 +325,8 @@ export class OpenAICompatProvider extends BaseProvider {
         await this.handleErrorResponse(response);
       }
 
-      const data = await response.json() as any;
-      return data.data?.map((model: any) => model.id) || [];
+  const data = await response.json() as { data?: Array<{ id: string }> };
+  return data.data?.map((model) => model.id) || [];
     } catch (error) {
       if (error instanceof ProviderError) {
         throw error;

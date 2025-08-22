@@ -3,6 +3,8 @@
  */
 
 import * as vscode from "vscode";
+import * as fs from "fs";
+import * as path from "path";
 
 import { ConfigError, ConfigLoader, ProfileConfig } from "./config";
 import { createModelRouterMcpServer } from "./mcp/server";
@@ -31,6 +33,8 @@ interface ExtensionState {
 
 let state: ExtensionState;
 let extensionContext: vscode.ExtensionContext;
+// Einfache Chat-History im Speicher (persistenz optional später)
+const chatHistory: { role: 'user'|'assistant'; content: string; meta?: any }[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   console.log("Aktiviere Model Router Extension...");
@@ -107,6 +111,143 @@ export function deactivate(): void {
 function registerCommands(context: vscode.ExtensionContext): void {
   const commands = [
     vscode.commands.registerCommand("modelRouter.chat", handleChatCommand),
+    vscode.commands.registerCommand("modelRouter.openChatUI", () => {
+      try {
+        const extUri = extensionContext.extensionUri;
+        const { ChatPanel } = require('./webview/chatPanel');
+        ChatPanel.createOrShow(extUri);
+        // Modelle & History an Webview senden
+        const panel = ChatPanel.current;
+        if (panel && state.router) {
+          try {
+            const profile = state.router.getProfile();
+            const models: string[] = [];
+            for (const prov of profile.providers) {
+              for (const m of prov.models) { if (!models.includes(m.name)) models.push(m.name); }
+            }
+            panel.sendModels(models.sort());
+            panel.sendHistory(chatHistory.slice(-200));
+          } catch {/* ignore */}
+        }
+      } catch (e) {
+        vscode.window.showErrorMessage(`Chat UI Fehler: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }),
+    vscode.commands.registerCommand('modelRouter.chat.sendFromWebview', async (text: string, modelOverride?: string, attachmentUris?: string[]) => {
+      if (!state.router) { vscode.window.showErrorMessage('Router nicht initialisiert'); return; }
+      const { ChatPanel } = require('./webview/chatPanel');
+      const panel = ChatPanel.current;
+      if (!panel) return;
+      try {
+        const ctx = { prompt: text, mode: state.currentMode } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+        let providerToUse: Provider | undefined;
+        let modelName: string | undefined;
+        let modelPrice: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+        let providerId: string | undefined;
+        let routed: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+        if (modelOverride) {
+          const profile = state.router.getProfile();
+            const provCfg = profile.providers.find(p => p.models.some(m => m.name === modelOverride));
+            if (provCfg) {
+              providerId = provCfg.id;
+              providerToUse = state.providers.get(provCfg.id);
+              modelName = modelOverride;
+              modelPrice = provCfg.models.find(m => m.name === modelOverride)?.price;
+              panel.sendInfo(`Override Modell: ${providerId}:${modelName}`);
+            }
+        }
+        if (!providerToUse) {
+          routed = await state.router.route(ctx);
+          providerToUse = routed.provider;
+          modelName = routed.modelName;
+          modelPrice = routed.model.price;
+          providerId = routed.providerId;
+        }
+        // --- Attachments Verarbeitung ---
+        let attachmentNote = '';
+        if (attachmentUris && attachmentUris.length) {
+          const summaries = await readAttachmentSummaries(attachmentUris);
+          if (summaries.length) {
+            attachmentNote = '\n\n[Anhänge]\n' + summaries.map(s => `### ${s.name}\n${s.snippet}`).join('\n');
+          }
+        }
+        const fullPrompt = text + attachmentNote;
+        // Kosten-Schätzung vorab
+        if (providerToUse && modelName && modelPrice) {
+          try {
+            const est = PriceCalculator.estimateCost(fullPrompt, { price: modelPrice } as any, modelName); // eslint-disable-line @typescript-eslint/no-explicit-any
+            panel.sendInfo(`Geschätzte Kosten: $${est.totalCost.toFixed(4)} (Tokens ~${est.inputTokens})`);
+          } catch {/* ignore */}
+        }
+        if (!providerToUse || !modelName) {
+          throw new Error('Kein Modell/Provider bestimmt');
+        }
+        let contentAccum = '';
+        for await (const chunk of providerToUse.chat(modelName, [{ role:'user', content: fullPrompt }])) {
+          if (chunk.type === 'text' && chunk.data) {
+            contentAccum += chunk.data;
+            panel.streamDelta(chunk.data);
+          } else if (chunk.type === 'done') {
+            if (chunk.data?.usage && modelPrice && providerId && modelName) {
+              try {
+                const actualCost = PriceCalculator.calculateActualCost(
+                  chunk.data.usage,
+                  modelPrice,
+                  modelName,
+                  providerId
+                );
+                await state.budgetManager.recordTransaction(
+                  providerId,
+                  modelName,
+                  actualCost.totalCost,
+                  actualCost.inputTokens,
+                  actualCost.outputTokens
+                );
+                panel.streamDone({ usage: chunk.data.usage, cost: actualCost });
+              } catch {
+                panel.streamDone({ usage: chunk.data.usage });
+              }
+            } else {
+              panel.streamDone();
+            }
+            break;
+          } else if (chunk.type === 'error') {
+            panel.showError(chunk.error || 'Unbekannter Fehler');
+            break;
+          }
+        }
+  chatHistory.push({ role: 'user', content: text, meta: { attachments: attachmentUris, override: modelOverride } });
+        chatHistory.push({ role: 'assistant', content: contentAccum, meta: { providerId, modelName } });
+        if (chatHistory.length > 1000) chatHistory.splice(0, chatHistory.length - 1000);
+      } catch (err) {
+        const { ChatPanel } = require('./webview/chatPanel');
+        ChatPanel.current?.showError(err instanceof Error ? err.message : String(err));
+      }
+    }),
+    vscode.commands.registerCommand('modelRouter.chat.tools', async () => {
+      vscode.window.showInformationMessage('Tools UI noch nicht implementiert.');
+    }),
+    vscode.commands.registerCommand('modelRouter.chat.planCurrent', async () => {
+      vscode.window.showInformationMessage('Plan / Agent Placeholder.');
+    }),
+    vscode.commands.registerCommand('modelRouter.chat.quickPrompt', async () => {
+      const cfg = vscode.workspace.getConfiguration('modelRouter');
+      const compact = cfg.get<boolean>('chat.compactMode', false);
+      if (!compact) {
+        vscode.commands.executeCommand('modelRouter.openChatUI');
+        return;
+      }
+      const text = await vscode.window.showInputBox({ prompt: 'Chat Prompt eingeben' });
+      if (!text) return;
+      if (!state.router) { vscode.window.showErrorMessage('Router nicht initialisiert'); return; }
+      // Falls Panel geöffnet -> dort streamen, sonst nur OutputChannel
+      const { ChatPanel } = require('./webview/chatPanel');
+      if (!ChatPanel.current) {
+        state.outputChannel.show(true);
+        state.outputChannel.appendLine(`> ${text}`);
+      }
+      vscode.commands.executeCommand('modelRouter.chat.sendFromWebview', text);
+    }),
     vscode.commands.registerCommand("modelRouter.routeOnce", handleRouteOnceCommand),
     vscode.commands.registerCommand("modelRouter.setApiKey", handleSetApiKeyCommand),
     vscode.commands.registerCommand("modelRouter.switchMode", handleSwitchModeCommand),
@@ -174,7 +315,19 @@ async function loadConfiguration(): Promise<void> {
 
     // Initialize voice control if enabled
     if (profile.voice?.enabled) {
-      await initializeVoiceControl(profile.voice);
+        await initializeVoiceControl(profile.voice);
+        // Voice State -> Chat Panel Bridge
+        if (state.voiceController) {
+          state.voiceController.addEventListener('stateChanged', (ev) => {
+            try {
+              const { ChatPanel } = require('./webview/chatPanel');
+              if (ChatPanel.current) {
+                const newState = typeof ev.data === 'string' ? ev.data : ev.data?.to?.toString?.() || 'idle';
+                ChatPanel.current.sendVoiceState?.(newState);
+              }
+            } catch { /* ignore */ }
+          });
+        }
     }
 
   state.outputChannel.appendLine(`Konfiguration geladen: ${profile.providers.length} Provider, Modus: ${profile.mode}${profile.voice?.enabled ? ', Voice: aktiv' : ''}`);
@@ -964,4 +1117,29 @@ Letzte Aktualisierung: ${new Date().toLocaleString('de-DE')}`;
       vscode.window.showInformationMessage("📤 Voice Control Daten exportiert");
       break;
   }
+}
+
+// ---- Hilfsfunktionen für Chat Attachments ----
+interface AttachmentSummary { name: string; snippet: string; }
+async function readAttachmentSummaries(paths: string[]): Promise<AttachmentSummary[]> {
+  const maxFiles = 5;
+  const maxBytesPerFile = 8 * 1024; // 8KB pro Datei (Preview)
+  const results: AttachmentSummary[] = [];
+  for (const p of paths.slice(0, maxFiles)) {
+    try {
+      const stat = fs.statSync(p);
+      if (stat.isDirectory()) continue;
+      if (stat.size > 512 * 1024) { // >512KB überspringen
+        results.push({ name: path.basename(p), snippet: '[Übersprungen: Datei zu groß]' });
+        continue;
+      }
+      const buf = fs.readFileSync(p);
+      const slice = buf.slice(0, maxBytesPerFile).toString('utf8');
+      const cleaned = slice.replace(/\u0000/g, '').replace(/\s+$/,'');
+      results.push({ name: path.basename(p), snippet: cleaned });
+    } catch {
+      // ignore
+    }
+  }
+  return results;
 }

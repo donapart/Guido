@@ -21,8 +21,20 @@ export interface OpenAIRequest {
     response_format?: {
         type: "json_object";
     };
-    tools?: any[];
-    tool_choice?: string | object;
+    tools?: Array<{
+        type: string;
+        function: {
+            name: string;
+            description?: string;
+            parameters?: unknown;
+        };
+    }>;
+    tool_choice?: string | {
+        type: string;
+        function?: {
+            name: string;
+        };
+    };
 }
 export interface OpenAIResponse {
     id: string;
@@ -34,12 +46,26 @@ export interface OpenAIResponse {
         message?: {
             role: string;
             content: string;
-            tool_calls?: any[];
+            tool_calls?: Array<{
+                id?: string;
+                type: string;
+                function?: {
+                    name: string;
+                    arguments?: string;
+                };
+            }>;
         };
         delta?: {
             role?: string;
             content?: string;
-            tool_calls?: any[];
+            tool_calls?: Array<{
+                id?: string;
+                type: string;
+                function?: {
+                    name: string;
+                    arguments?: string;
+                };
+            }>;
         };
         finish_reason?: "stop" | "length" | "tool_calls" | "content_filter";
     }>;

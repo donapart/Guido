@@ -57,8 +57,11 @@ class OpenAICompatProvider extends base_1.BaseProvider {
             request.response_format = { type: "json_object" };
         }
         if (opts.toolsJsonSchema) {
-            request.tools = opts.toolsJsonSchema;
-            request.tool_choice = "auto";
+            // Accept user supplied schema array; perform minimal shape validation
+            if (Array.isArray(opts.toolsJsonSchema)) {
+                request.tools = opts.toolsJsonSchema;
+                request.tool_choice = "auto";
+            }
         }
         try {
             const response = await fetch(`${this.config.baseUrl}/chat/completions`, {

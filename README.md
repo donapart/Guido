@@ -1,5 +1,10 @@
 # Model Router für VSCode/Cursor mit Guido Voice Control 🎤
 
+> Sprache / Language: **Deutsch** | [English](./README.en.md)
+
+<!-- TOC START -->
+<!-- TOC END -->
+
 Eine intelligente VSCode-Extension, die **automatisch das optimale KI-Modell** für jede Aufgabe auswählt. Mit **vollständiger Sprachsteuerung "Guido"**, Unterstützung für OpenAI, DeepSeek, Grok, Phi, Ollama und anderen Providern.
 
 ## 🎯 Features
@@ -308,6 +313,29 @@ budget:
 ```
 Model Router: Show Costs     # Ausgaben-Übersicht
 ```
+
+### Statusbar-Anzeige (Budget)
+
+Die Statusleiste zeigt – sofern aktiviert – den aktuellen Modus und optional den Budgetverbrauch an.
+
+Einstellungen (`settings.json`):
+```json
+{
+  "modelRouter.showBudgetInStatusBar": true,
+  "modelRouter.budgetDisplayMode": "compact" // oder "detailed"
+}
+```
+
+Modi:
+- `compact`: `Router: auto (2) | $0.12/2.50`
+- `detailed`: `Router: auto (2) | d:0.12/2.50 (5%) m:2.30/100 (2%)`
+
+Legende:
+- `d:` Tagesverbrauch / Tageslimit (+ Prozent)
+- `m:` Monatsverbrauch / Monatslimit (+ Prozent)
+- Fehlt ein Monatsbudget, wird nur der Tageswert angezeigt.
+
+Farbanpassung erfolgt aktuell nicht dynamisch; Warnungen (z.B. 80% erreicht) erscheinen als VSCode-Notification und im Output-Channel. Hard-Stops verhindern weitere Aufrufe über dem Limit, sofern `hardStop: true` gesetzt ist.
 
 Zeigt:
 - Tagesausgaben vs. Budget

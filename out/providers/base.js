@@ -50,7 +50,15 @@ class BaseProvider {
                     case "done":
                         if (chunk.data && typeof chunk.data === "object") {
                             usage = chunk.data.usage;
-                            finishReason = chunk.data.finishReason || "stop";
+                            // accept unknown finish reasons but coerce to allowed union where possible
+                            const fr = chunk.data.finishReason;
+                            if (fr === "stop" || fr === "length" || fr === "tool_calls" || fr === "cancelled" || fr === undefined) {
+                                finishReason = fr ?? "stop";
+                            }
+                            else {
+                                // preserve as string but cast (extension for forward compatibility)
+                                finishReason = fr; // fallback
+                            }
                         }
                         break;
                     case "error":

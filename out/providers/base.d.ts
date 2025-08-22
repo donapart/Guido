@@ -10,14 +10,43 @@ export interface ChatOptions {
     maxTokens?: number;
     temperature?: number;
     json?: boolean;
-    toolsJsonSchema?: any;
+    /** OpenAI style tool schema array or provider specific structure */
+    toolsJsonSchema?: unknown;
     signal?: AbortSignal;
 }
-export interface ChatStreamChunk {
-    type: "text" | "tool" | "done" | "error";
-    data?: string | any;
-    error?: string;
+export interface ChatStreamTextChunk {
+    type: "text";
+    data: string;
 }
+export interface ChatStreamToolCallFunction {
+    name: string;
+    description?: string;
+    arguments?: string;
+}
+export interface ChatStreamToolCall {
+    id?: string;
+    type: string;
+    function?: ChatStreamToolCallFunction;
+    [k: string]: unknown;
+}
+export interface ChatStreamToolChunk {
+    type: "tool";
+    data: ChatStreamToolCall[];
+}
+export interface ChatStreamDoneInfo {
+    usage?: TokenUsage;
+    finishReason?: "stop" | "length" | "tool_calls" | "cancelled" | string;
+    performance?: Record<string, unknown>;
+}
+export interface ChatStreamDoneChunk {
+    type: "done";
+    data?: ChatStreamDoneInfo;
+}
+export interface ChatStreamErrorChunk {
+    type: "error";
+    error: string;
+}
+export type ChatStreamChunk = ChatStreamTextChunk | ChatStreamToolChunk | ChatStreamDoneChunk | ChatStreamErrorChunk;
 export interface TokenUsage {
     inputTokens: number;
     outputTokens: number;

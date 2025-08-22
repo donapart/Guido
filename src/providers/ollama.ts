@@ -4,13 +4,13 @@
  */
 
 import {
-    BaseProvider,
-    ChatMessage,
-    ChatOptions,
-    ChatStreamChunk,
-    ProviderConfig,
-    ProviderError,
-    TokenUsage,
+  BaseProvider,
+  ChatMessage,
+  ChatOptions,
+  ChatStreamChunk,
+  ProviderConfig,
+  ProviderError,
+  TokenUsage,
 } from "./base";
 
 export interface OllamaConfig extends ProviderConfig {
@@ -230,7 +230,7 @@ export class OllamaProvider extends BaseProvider {
     let errorMessage = `HTTP ${response.status}`;
     
     try {
-      const errorData = await response.json() as any;
+  const errorData = await response.json() as { error?: string };
       if (errorData.error) {
         errorMessage = errorData.error;
       }
@@ -257,8 +257,8 @@ export class OllamaProvider extends BaseProvider {
         await this.handleErrorResponse(response);
       }
 
-      const data = await response.json() as any;
-      return data.models || [];
+  const data = await response.json() as { models?: OllamaModelInfo[] };
+  return data.models || [];
     } catch (error) {
       if (error instanceof ProviderError) {
         throw error;
