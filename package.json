@@ -24,6 +24,7 @@
     "onStartupFinished"
   ],
   "main": "./out/extension.js",
+  "icon": "images/extension-icon-512.png",
   "contributes": {
     "configuration": {
       "title": "Model Router",
@@ -281,7 +282,19 @@
           "when": "config.modelRouter.chat.showDockView",
           "icon": "$(comment-discussion)"
         }
-      ]
+      ],
+      "viewsContainers": {
+        "activitybar": [
+          {
+            "id": "guido",
+            "title": "Guido",
+            "icon": {
+              "light": "resources/activity/light/guido_activity_light.svg",
+              "dark": "resources/activity/dark/guido_activity_dark.svg"
+            }
+          }
+        ]
+      }
     }
   },
   "scripts": {

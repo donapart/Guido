@@ -49,6 +49,19 @@ An intelligent VSCode extension that **automatically selects the optimal AI mode
 - QuickPrompt compact mode
 - Full command palette integration
 
+## 🖼️ New UI Assets
+
+### Marketplace Icon
+The Marketplace icon is a 512×512 PNG stored in the file `images/extension-icon-512.png`.
+
+### Activity Bar Icons
+The Activity Bar uses monochrome SVGs for dark and light themes:
+- Light Theme: `resources/activity/light/guido_activity_light.svg`
+- Dark Theme: `resources/activity/dark/guido_activity_dark.svg`
+
+### Status Bar and Webview
+For the status bar and webview buttons, PNGs sized 32×32 or 48×48 are used.
+
 ## 🚀 Installation
 
 ### 1. Prerequisites
