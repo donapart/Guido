@@ -211,8 +211,14 @@
           "command": "modelRouter.chat.quickPrompt",
           "icon": "$(comment)"
         },
-  { "command": "modelRouter.chat.tools", "icon": "$(tools)" },
-  { "command": "modelRouter.chat.planCurrent", "icon": "$(rocket)" }
+        {
+          "command": "modelRouter.chat.tools",
+          "icon": "$(tools)"
+        },
+        {
+          "command": "modelRouter.chat.planCurrent",
+          "icon": "$(rocket)"
+        }
       ]
     },
     "views": {
@@ -221,13 +227,15 @@
           "type": "webview",
           "id": "guidoVoiceControl",
           "name": "🎤 Guido Voice Control",
-          "when": "config.modelRouter.voice.enabled"
+          "when": "config.modelRouter.voice.enabled",
+          "icon": "$(mic)"
         },
         {
           "type": "webview",
           "id": "modelRouterChatDock",
           "name": "💬 Model Router Chat (Dock)",
-          "when": "false"
+          "when": "false",
+          "icon": "$(comment-discussion)"
         }
       ]
     }

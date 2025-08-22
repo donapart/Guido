@@ -33,8 +33,28 @@ interface ExtensionState {
 
 let state: ExtensionState;
 let extensionContext: vscode.ExtensionContext;
-// Einfache Chat-History im Speicher (persistenz optional später)
+// Chat-History (mit optionaler Persistenz)
 const chatHistory: { role: 'user'|'assistant'; content: string; meta?: any }[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
+let chatHistoryLoaded = false;
+
+async function loadPersistedChatHistory() {
+  if (chatHistoryLoaded) return;
+  try {
+    const cfg = vscode.workspace.getConfiguration('modelRouter');
+    if (!cfg.get<boolean>('chat.persistHistory', true)) { chatHistoryLoaded = true; return; }
+    const stored = extensionContext.globalState.get<any[]>('modelRouter.chat.history'); // eslint-disable-line @typescript-eslint/no-explicit-any
+    if (Array.isArray(stored)) chatHistory.push(...stored.slice(-1000));
+  } catch { /* ignore */ }
+  finally { chatHistoryLoaded = true; }
+}
+
+function persistChatHistory() {
+  try {
+    const cfg = vscode.workspace.getConfiguration('modelRouter');
+    if (!cfg.get<boolean>('chat.persistHistory', true)) return;
+    extensionContext.globalState.update('modelRouter.chat.history', chatHistory.slice(-1000));
+  } catch { /* ignore */ }
+}
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   console.log("Aktiviere Model Router Extension...");
@@ -111,7 +131,7 @@ export function deactivate(): void {
 function registerCommands(context: vscode.ExtensionContext): void {
   const commands = [
     vscode.commands.registerCommand("modelRouter.chat", handleChatCommand),
-    vscode.commands.registerCommand("modelRouter.openChatUI", () => {
+  vscode.commands.registerCommand("modelRouter.openChatUI", async () => {
       try {
         const extUri = extensionContext.extensionUri;
         const { ChatPanel } = require('./webview/chatPanel');
@@ -125,6 +145,7 @@ function registerCommands(context: vscode.ExtensionContext): void {
             for (const prov of profile.providers) {
               for (const m of prov.models) { if (!models.includes(m.name)) models.push(m.name); }
             }
+      if (!chatHistoryLoaded) await loadPersistedChatHistory();
             panel.sendModels(models.sort());
             panel.sendHistory(chatHistory.slice(-200));
           } catch {/* ignore */}
@@ -216,19 +237,69 @@ function registerCommands(context: vscode.ExtensionContext): void {
             break;
           }
         }
-  chatHistory.push({ role: 'user', content: text, meta: { attachments: attachmentUris, override: modelOverride } });
+        chatHistory.push({ role: 'user', content: text, meta: { attachments: attachmentUris, override: modelOverride } });
         chatHistory.push({ role: 'assistant', content: contentAccum, meta: { providerId, modelName } });
         if (chatHistory.length > 1000) chatHistory.splice(0, chatHistory.length - 1000);
+        persistChatHistory();
       } catch (err) {
         const { ChatPanel } = require('./webview/chatPanel');
         ChatPanel.current?.showError(err instanceof Error ? err.message : String(err));
       }
     }),
     vscode.commands.registerCommand('modelRouter.chat.tools', async () => {
-      vscode.window.showInformationMessage('Tools UI noch nicht implementiert.');
+      const selection = await vscode.window.showQuickPick([
+        'Routing-Simulation (letzte Nutzer-Nachricht)',
+        'Kosten / Budget Übersicht',
+        'Letzte Antwort erneut senden',
+        'Verlauf löschen'
+      ], { placeHolder: 'Chat Tools' });
+      if (!selection) return;
+      const { ChatPanel } = require('./webview/chatPanel');
+      const panel = ChatPanel.current;
+      switch (selection) {
+        case 'Routing-Simulation (letzte Nutzer-Nachricht)': {
+          const lastUser = [...chatHistory].reverse().find(m => m.role === 'user');
+          if (!lastUser) { vscode.window.showWarningMessage('Keine Nutzer-Nachricht gefunden'); return; }
+          if (!state.router) { vscode.window.showErrorMessage('Router nicht initialisiert'); return; }
+          try {
+            const sim = await state.router.simulateRoute({ prompt: lastUser.content, mode: state.currentMode });
+            let textInfo = 'Routing Simulation:\n';
+            if (sim.result) textInfo += `Gewählt: ${sim.result.providerId}:${sim.result.modelName} (Score ${sim.result.score})\n`;
+            textInfo += 'Top Alternativen:\n';
+            sim.alternatives.slice(0,5).forEach(a => { textInfo += ` - ${a.providerId}:${a.modelName} (Score ${a.score})${a.available ? '' : ' [unavailable]'}\n`; });
+            panel?.sendInfo(textInfo);
+          } catch (e) { panel?.sendInfo('Fehler Simulation: ' + (e as Error).message); }
+          break; }
+        case 'Kosten / Budget Übersicht': {
+          try {
+            const stats = await state.budgetManager.getSpendingStats();
+            const usage = await state.budgetManager.getBudgetUsage();
+            panel?.sendInfo(`Kosten: total $${stats.totalSpent.toFixed(4)} | heute $${usage.dailySpent.toFixed(4)} | Monat $${usage.monthlySpent.toFixed(4)}`);
+          } catch (e) { panel?.sendInfo('Fehler Kosten: ' + (e as Error).message); }
+          break; }
+        case 'Letzte Antwort erneut senden': {
+          const lastUser = [...chatHistory].reverse().find(m => m.role === 'user');
+          if (lastUser) vscode.commands.executeCommand('modelRouter.chat.sendFromWebview', lastUser.content);
+          break; }
+        case 'Verlauf löschen': {
+          chatHistory.splice(0, chatHistory.length); persistChatHistory(); panel?.sendInfo('Verlauf gelöscht'); break; }
+      }
     }),
     vscode.commands.registerCommand('modelRouter.chat.planCurrent', async () => {
-      vscode.window.showInformationMessage('Plan / Agent Placeholder.');
+      const lastUser = [...chatHistory].reverse().find(m => m.role === 'user');
+      if (!lastUser) { vscode.window.showWarningMessage('Kein letzter Nutzer-Prompt'); return; }
+      if (!state.router) { vscode.window.showErrorMessage('Router nicht initialisiert'); return; }
+      const plannerPrompt = `Analysiere die folgende Anfrage und erstelle einen nummerierten, kurzen Umsetzungsplan mit maximal 7 Schritten. Jede Zeile: "Schritt X: ..."\n\nAnfrage:\n${lastUser.content}`;
+      try {
+        const routed = await state.router.route({ prompt: plannerPrompt, mode: 'auto' });
+        const result = await routed.provider.chatComplete(routed.modelName, [{ role: 'user', content: plannerPrompt }], { maxTokens: 300, temperature: 0.2 });
+        const { ChatPanel } = require('./webview/chatPanel');
+        ChatPanel.current?.sendInfo('Plan:\n' + result.content.trim());
+        chatHistory.push({ role: 'assistant', content: '[Plan]\n' + result.content.trim(), meta: { kind: 'plan' } });
+        persistChatHistory();
+      } catch (e) {
+        vscode.window.showErrorMessage('Plan Fehler: ' + (e as Error).message);
+      }
     }),
     vscode.commands.registerCommand('modelRouter.chat.quickPrompt', async () => {
       const cfg = vscode.workspace.getConfiguration('modelRouter');
