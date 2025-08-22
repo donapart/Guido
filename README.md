@@ -339,3 +339,19 @@ Die Activity Bar verwendet monochrome SVGs für Dark- und Light-Themes:
 
 ### Statusbar und Webview
 Für die Statusbar und Webview-Buttons werden PNGs in den Größen 32×32 oder 48×48 verwendet.
+
+## Version 0.1.3
+
+### Änderungen
+- Fallback-Mechanismus für Konfigurationspfad hinzugefügt.
+- Verbesserte Sprachsteuerung mit Mikrofonberechtigungsprüfung.
+
+### Neue Funktionen
+- Unterstützung für Cursor-Modell-Router.
+
+### Installation
+1. Laden Sie die VSIX-Datei herunter.
+2. Installieren Sie die Erweiterung in VSCode über `Extensions > Install from VSIX`.
+
+### Cursor-Modell-Router
+Der Cursor-Modell-Router ermöglicht eine präzise Steuerung von Modellen basierend auf Cursor-Positionen.
