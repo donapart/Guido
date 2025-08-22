@@ -28,6 +28,7 @@ interface ExtensionState {
 }
 
 let state: ExtensionState;
+let extensionContext: vscode.ExtensionContext;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   console.log("Aktiviere Model Router Extension...");

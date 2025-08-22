@@ -845,15 +845,24 @@ Formalität: ${this.config.routing.responseStyle.formality}`;
     return Math.max(100, Math.min(500, this.config.routing.maxResponseLength / 3));
   }
 
-  private updateStats(response: VoiceResponse): void {
-    this.stats.commandsExecuted++;
-    
-    // Update response time statistics
-    const responseTime = response.metadata.duration;
-    this.stats.responseTime.average = 
-      (this.stats.responseTime.average * (this.stats.commandsExecuted - 1) + responseTime) / 
-      this.stats.commandsExecuted;
-  }
+     private updateStats(response: VoiceResponse): void {
+     this.stats.commandsExecuted++;
+     
+     // Update response time statistics
+     const responseTime = response.metadata.duration;
+     this.stats.responseTime.average = 
+       (this.stats.responseTime.average * (this.stats.commandsExecuted - 1) + responseTime) / 
+       this.stats.commandsExecuted;
+   }
+
+   /**
+    * Setup wake word detection system
+    */
+   private setupWakeWordDetection(): void {
+     // This will be handled by the webview JavaScript
+     // The webview will detect wake words and send messages back
+     console.log('🎯 Wake word detection configured for:', this.config.wakeWord);
+   }
 
   private async registerDefaultCommands(): Promise<void> {
     // Register built-in voice commands
