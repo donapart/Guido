@@ -3,7 +3,7 @@
   "displayName": "Model Router (VSCode/Cursor)",
   "description": "Automatische KI-Modell-Auswahl mit Routing-Engine, Kostenmanagement und Privacy-Modi",
   "publisher": "model-router",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "engines": {
     "vscode": "^1.99.0"
   },
