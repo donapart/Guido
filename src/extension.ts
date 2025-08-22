@@ -5,6 +5,8 @@
 import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
+import { ChatDockViewProvider } from './webview/chatDockView';
+import { getActiveChatTargets } from './webview/chatTargets';
 
 import { ConfigError, ConfigLoader, ProfileConfig } from "./config";
 import { createModelRouterMcpServer } from "./mcp/server";
@@ -99,6 +101,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Register commands
   registerCommands(context);
 
+  // Register docked chat view provider
+  try {
+    const dockProvider = new ChatDockViewProvider(extensionContext.extensionUri);
+    context.subscriptions.push(vscode.window.registerWebviewViewProvider(ChatDockViewProvider.viewType, dockProvider, { webviewOptions: { retainContextWhenHidden: true } }));
+  } catch (e) {
+    state.outputChannel.appendLine('Dock View Registrierung fehlgeschlagen: ' + (e instanceof Error ? e.message : String(e)));
+  }
+
   // Watch for configuration changes
   const configWatcher = vscode.workspace.onDidChangeConfiguration(async (event) => {
     if (event.affectsConfiguration("modelRouter")) {
@@ -137,8 +147,8 @@ function registerCommands(context: vscode.ExtensionContext): void {
         const { ChatPanel } = require('./webview/chatPanel');
         ChatPanel.createOrShow(extUri);
         // Modelle & History an Webview senden
-        const panel = ChatPanel.current;
-        if (panel && state.router) {
+    const targets = getActiveChatTargets();
+    if (targets.length && state.router) {
           try {
             const profile = state.router.getProfile();
             const models: string[] = [];
@@ -146,8 +156,7 @@ function registerCommands(context: vscode.ExtensionContext): void {
               for (const m of prov.models) { if (!models.includes(m.name)) models.push(m.name); }
             }
       if (!chatHistoryLoaded) await loadPersistedChatHistory();
-            panel.sendModels(models.sort());
-            panel.sendHistory(chatHistory.slice(-200));
+    targets.forEach(t => { t.sendModels(models.sort()); t.sendHistory(chatHistory.slice(-200)); });
           } catch {/* ignore */}
         }
       } catch (e) {
@@ -156,9 +165,8 @@ function registerCommands(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('modelRouter.chat.sendFromWebview', async (text: string, modelOverride?: string, attachmentUris?: string[]) => {
       if (!state.router) { vscode.window.showErrorMessage('Router nicht initialisiert'); return; }
-      const { ChatPanel } = require('./webview/chatPanel');
-      const panel = ChatPanel.current;
-      if (!panel) return;
+  const targets = getActiveChatTargets();
+  if (!targets.length) return; // Keine aktive Oberfläche
       try {
         const ctx = { prompt: text, mode: state.currentMode } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
         let providerToUse: Provider | undefined;
@@ -174,7 +182,7 @@ function registerCommands(context: vscode.ExtensionContext): void {
               providerToUse = state.providers.get(provCfg.id);
               modelName = modelOverride;
               modelPrice = provCfg.models.find(m => m.name === modelOverride)?.price;
-              panel.sendInfo(`Override Modell: ${providerId}:${modelName}`);
+              targets.forEach(t => t.sendInfo(`Override Modell: ${providerId}:${modelName}`));
             }
         }
         if (!providerToUse) {
@@ -197,7 +205,7 @@ function registerCommands(context: vscode.ExtensionContext): void {
         if (providerToUse && modelName && modelPrice) {
           try {
             const est = PriceCalculator.estimateCost(fullPrompt, { price: modelPrice } as any, modelName); // eslint-disable-line @typescript-eslint/no-explicit-any
-            panel.sendInfo(`Geschätzte Kosten: $${est.totalCost.toFixed(4)} (Tokens ~${est.inputTokens})`);
+            targets.forEach(t => t.sendInfo(`Geschätzte Kosten: $${est.totalCost.toFixed(4)} (Tokens ~${est.inputTokens})`));
           } catch {/* ignore */}
         }
         if (!providerToUse || !modelName) {
@@ -207,7 +215,7 @@ function registerCommands(context: vscode.ExtensionContext): void {
         for await (const chunk of providerToUse.chat(modelName, [{ role:'user', content: fullPrompt }])) {
           if (chunk.type === 'text' && chunk.data) {
             contentAccum += chunk.data;
-            panel.streamDelta(chunk.data);
+            targets.forEach(t => t.streamDelta(chunk.data));
           } else if (chunk.type === 'done') {
             if (chunk.data?.usage && modelPrice && providerId && modelName) {
               try {
@@ -224,16 +232,16 @@ function registerCommands(context: vscode.ExtensionContext): void {
                   actualCost.inputTokens,
                   actualCost.outputTokens
                 );
-                panel.streamDone({ usage: chunk.data.usage, cost: actualCost });
+                targets.forEach(t => t.streamDone({ usage: chunk.data?.usage, cost: actualCost }));
               } catch {
-                panel.streamDone({ usage: chunk.data.usage });
+                targets.forEach(t => t.streamDone({ usage: chunk.data?.usage }));
               }
             } else {
-              panel.streamDone();
+              targets.forEach(t => t.streamDone());
             }
             break;
           } else if (chunk.type === 'error') {
-            panel.showError(chunk.error || 'Unbekannter Fehler');
+            targets.forEach(t => t.showError(chunk.error || 'Unbekannter Fehler'));
             break;
           }
         }
@@ -242,8 +250,7 @@ function registerCommands(context: vscode.ExtensionContext): void {
         if (chatHistory.length > 1000) chatHistory.splice(0, chatHistory.length - 1000);
         persistChatHistory();
       } catch (err) {
-        const { ChatPanel } = require('./webview/chatPanel');
-        ChatPanel.current?.showError(err instanceof Error ? err.message : String(err));
+        getActiveChatTargets().forEach(t => t.showError(err instanceof Error ? err.message : String(err)));
       }
     }),
     vscode.commands.registerCommand('modelRouter.chat.tools', async () => {
@@ -254,8 +261,7 @@ function registerCommands(context: vscode.ExtensionContext): void {
         'Verlauf löschen'
       ], { placeHolder: 'Chat Tools' });
       if (!selection) return;
-      const { ChatPanel } = require('./webview/chatPanel');
-      const panel = ChatPanel.current;
+      const targets = getActiveChatTargets();
       switch (selection) {
         case 'Routing-Simulation (letzte Nutzer-Nachricht)': {
           const lastUser = [...chatHistory].reverse().find(m => m.role === 'user');
@@ -267,22 +273,22 @@ function registerCommands(context: vscode.ExtensionContext): void {
             if (sim.result) textInfo += `Gewählt: ${sim.result.providerId}:${sim.result.modelName} (Score ${sim.result.score})\n`;
             textInfo += 'Top Alternativen:\n';
             sim.alternatives.slice(0,5).forEach(a => { textInfo += ` - ${a.providerId}:${a.modelName} (Score ${a.score})${a.available ? '' : ' [unavailable]'}\n`; });
-            panel?.sendInfo(textInfo);
-          } catch (e) { panel?.sendInfo('Fehler Simulation: ' + (e as Error).message); }
+            targets.forEach(t => t.sendInfo(textInfo));
+          } catch (e) { targets.forEach(t => t.sendInfo('Fehler Simulation: ' + (e as Error).message)); }
           break; }
         case 'Kosten / Budget Übersicht': {
           try {
             const stats = await state.budgetManager.getSpendingStats();
             const usage = await state.budgetManager.getBudgetUsage();
-            panel?.sendInfo(`Kosten: total $${stats.totalSpent.toFixed(4)} | heute $${usage.dailySpent.toFixed(4)} | Monat $${usage.monthlySpent.toFixed(4)}`);
-          } catch (e) { panel?.sendInfo('Fehler Kosten: ' + (e as Error).message); }
+            targets.forEach(t => t.sendInfo(`Kosten: total $${stats.totalSpent.toFixed(4)} | heute $${usage.dailySpent.toFixed(4)} | Monat $${usage.monthlySpent.toFixed(4)}`));
+          } catch (e) { targets.forEach(t => t.sendInfo('Fehler Kosten: ' + (e as Error).message)); }
           break; }
         case 'Letzte Antwort erneut senden': {
           const lastUser = [...chatHistory].reverse().find(m => m.role === 'user');
           if (lastUser) vscode.commands.executeCommand('modelRouter.chat.sendFromWebview', lastUser.content);
           break; }
         case 'Verlauf löschen': {
-          chatHistory.splice(0, chatHistory.length); persistChatHistory(); panel?.sendInfo('Verlauf gelöscht'); break; }
+          chatHistory.splice(0, chatHistory.length); persistChatHistory(); targets.forEach(t => t.sendInfo('Verlauf gelöscht')); break; }
       }
     }),
     vscode.commands.registerCommand('modelRouter.chat.planCurrent', async () => {
@@ -293,8 +299,7 @@ function registerCommands(context: vscode.ExtensionContext): void {
       try {
         const routed = await state.router.route({ prompt: plannerPrompt, mode: 'auto' });
         const result = await routed.provider.chatComplete(routed.modelName, [{ role: 'user', content: plannerPrompt }], { maxTokens: 300, temperature: 0.2 });
-        const { ChatPanel } = require('./webview/chatPanel');
-        ChatPanel.current?.sendInfo('Plan:\n' + result.content.trim());
+        getActiveChatTargets().forEach(t => t.sendInfo('Plan:\n' + result.content.trim()));
         chatHistory.push({ role: 'assistant', content: '[Plan]\n' + result.content.trim(), meta: { kind: 'plan' } });
         persistChatHistory();
       } catch (e) {
@@ -311,9 +316,8 @@ function registerCommands(context: vscode.ExtensionContext): void {
       const text = await vscode.window.showInputBox({ prompt: 'Chat Prompt eingeben' });
       if (!text) return;
       if (!state.router) { vscode.window.showErrorMessage('Router nicht initialisiert'); return; }
-      // Falls Panel geöffnet -> dort streamen, sonst nur OutputChannel
-      const { ChatPanel } = require('./webview/chatPanel');
-      if (!ChatPanel.current) {
+      // Falls keine Oberfläche -> OutputChannel
+      if (!getActiveChatTargets().length) {
         state.outputChannel.show(true);
         state.outputChannel.appendLine(`> ${text}`);
       }
