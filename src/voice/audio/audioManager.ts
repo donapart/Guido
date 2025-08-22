@@ -22,7 +22,8 @@ export class AudioManager {
 
   constructor(config: VoiceConfig) {
     this.config = config;
-    this.synthesis = window.speechSynthesis;
+    // Speech synthesis will be initialized in webview context
+    this.synthesis = (globalThis as any).speechSynthesis;
     this.masterVolume = config.audio.volume;
   }
 
@@ -31,8 +32,13 @@ export class AudioManager {
    */
   async initialize(): Promise<void> {
     try {
-      // Initialize Web Audio API context
-      this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+             // Initialize Web Audio API context
+       const AudioContextClass = (globalThis as any).AudioContext || (globalThis as any).webkitAudioContext;
+       if (AudioContextClass) {
+         this.audioContext = new AudioContextClass();
+       } else {
+         throw new Error('Web Audio API not supported');
+       }
       
       // Resume context if suspended (Chrome auto-suspend policy)
       if (this.audioContext.state === 'suspended') {

@@ -1,0 +1,23 @@
+{
+  "displayName": "Model Router (VSCode/Cursor)",
+  "description": "Automatische KI-Modell-Auswahl mit Routing-Engine, Kostenmanagement und Guido Sprachsteuerung",
+  
+  "command.chat.title": "Model Router: Chat",
+  "command.routeOnce.title": "Model Router: Prompt einmal routen", 
+  "command.setApiKey.title": "Model Router: API-Schlüssel setzen (Provider)",
+  "command.switchMode.title": "Model Router: Modus wechseln",
+  "command.openConfig.title": "Model Router: Konfiguration öffnen",
+  "command.showCosts.title": "Model Router: Kosten anzeigen",
+  "command.testConnection.title": "Model Router: Provider-Verbindung testen",
+  "command.startVoiceControl.title": "Model Router: Sprachsteuerung starten (Guido)",
+  "command.stopVoiceControl.title": "Model Router: Sprachsteuerung stoppen",
+  "command.toggleVoiceControl.title": "Model Router: Sprachsteuerung umschalten",
+  "command.voiceSettings.title": "Model Router: Sprach-Einstellungen",
+  "command.voicePermissions.title": "Model Router: Sprach-Berechtigungen & Datenschutz",
+  
+  "config.configPath.description": "Pfad zur Router-Konfiguration (YAML).",
+  "config.mode.description": "Aktiver Routing-Modus",
+  "config.enablePromptClassifier.description": "Erweiterte Prompt-Klassifikation aktivieren",
+  
+  "view.guidoVoiceControl.name": "🎤 Guido Sprachsteuerung"
+}
