@@ -3,14 +3,14 @@
  */
 
 import * as vscode from "vscode";
+import { ModelRouter } from "../../router";
 import {
+  SupportedLanguage,
+  VoiceCommandHandler,
   VoiceConfig,
   VoiceResponse,
   VoiceRoutingContext,
-  VoiceCommandHandler,
-  SupportedLanguage
 } from "../types";
-import { ModelRouter } from "../../router";
 
 export class VoiceCommandProcessor {
   private commandHandlers: Map<string, VoiceCommandHandler> = new Map();
