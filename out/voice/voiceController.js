@@ -39,10 +39,10 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.VoiceController = void 0;
 const vscode = __importStar(require("vscode"));
-const voiceWebviewProvider_1 = require("./webview/voiceWebviewProvider");
+const audioManager_1 = require("./audio/audioManager");
 const voiceCommandProcessor_1 = require("./commands/voiceCommandProcessor");
 const voicePermissionManager_1 = require("./permissions/voicePermissionManager");
-const audioManager_1 = require("./audio/audioManager");
+const voiceWebviewProvider_1 = require("./webview/voiceWebviewProvider");
 class VoiceController {
     context;
     state = "idle";
@@ -92,7 +92,7 @@ class VoiceController {
             // 3. Initialize webview
             await this.webviewProvider.initialize();
             // 4. Setup wake word detection
-            await this.setupWakeWordDetection();
+            this.setupWakeWordDetection();
             // 5. Register command handlers
             await this.registerDefaultCommands();
             // 6. Start listening if auto-start enabled
@@ -309,7 +309,7 @@ class VoiceController {
             return response;
         }
         catch (error) {
-            throw new Error(`AI response generation failed: ${error.message}`);
+            throw new Error(`AI response generation failed: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
     /**
@@ -742,6 +742,14 @@ Formalität: ${this.config.routing.responseStyle.formality}`;
         this.stats.responseTime.average =
             (this.stats.responseTime.average * (this.stats.commandsExecuted - 1) + responseTime) /
                 this.stats.commandsExecuted;
+    }
+    /**
+     * Setup wake word detection system
+     */
+    setupWakeWordDetection() {
+        // This will be handled by the webview JavaScript
+        // The webview will detect wake words and send messages back
+        console.log('🎯 Wake word detection configured for:', this.config.wakeWord);
     }
     async registerDefaultCommands() {
         // Register built-in voice commands

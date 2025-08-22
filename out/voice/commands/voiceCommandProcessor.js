@@ -377,7 +377,7 @@ Verwende den passenden Dokumentations-Stil für die Sprache (JSDoc, DocString, e
         }
         catch (error) {
             return {
-                text: `Fehler bei ${operation}: ${error.message}`,
+                text: `Fehler bei ${operation}: ${error instanceof Error ? error.message : String(error)}`,
                 shouldSpeak: true,
                 metadata: {
                     model: "error",

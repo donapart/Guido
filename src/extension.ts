@@ -14,6 +14,7 @@ import { OpenAICompatProvider } from "./providers/openaiCompat";
 import { ModelRouter } from "./router";
 import { getSecretHelper, initializeSecrets } from "./secret";
 import { VoiceController } from "./voice/voiceController";
+import type { VoiceConfig } from "./voice/types";
 
 interface ExtensionState {
   router?: ModelRouter;

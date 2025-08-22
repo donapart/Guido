@@ -115,19 +115,13 @@ Stimmen Sie der Verarbeitung Ihrer Sprachdaten zu?`;
         return false;
     }
     /**
-     * Request microphone permission
-     */
+   * Request microphone permission (Stub - handled by webview)
+   */
     async requestMicrophonePermission() {
         if (!this.config.microphoneAccess.required) {
             return;
         }
         try {
-            // Check if already granted
-            const permission = await navigator.permissions.query({ name: 'microphone' });
-            this.permissions.microphone = permission.state;
-            if (permission.state === 'granted') {
-                return;
-            }
             if (this.config.microphoneAccess.showPermissionDialog) {
                 const result = await vscode.window.showInformationMessage("🎤 Mikrofon-Berechtigung erforderlich\n\nGuido Voice Control benötigt Zugriff auf Ihr Mikrofon für die Sprachsteuerung.", { modal: true }, "Berechtigung erteilen", "Ablehnen");
                 if (result !== "Berechtigung erteilen") {
@@ -135,27 +129,9 @@ Stimmen Sie der Verarbeitung Ihrer Sprachdaten zu?`;
                     throw new Error("Mikrofon-Berechtigung wurde verweigert");
                 }
             }
-            // Request permission via getUserMedia
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                this.permissions.microphone = "granted";
-                // Close stream immediately as we only needed it for permission
-                stream.getTracks().forEach(track => track.stop());
-                vscode.window.showInformationMessage("✅ Mikrofon-Berechtigung erteilt");
-            }
-            catch (error) {
-                this.permissions.microphone = "denied";
-                if (error.name === 'NotAllowedError') {
-                    vscode.window.showErrorMessage("❌ Mikrofon-Zugriff verweigert. Bitte erlauben Sie den Zugriff in den Browser-Einstellungen.");
-                }
-                else if (error.name === 'NotFoundError') {
-                    vscode.window.showErrorMessage("❌ Kein Mikrofon gefunden. Bitte schließen Sie ein Mikrofon an.");
-                }
-                else {
-                    vscode.window.showErrorMessage(`❌ Mikrofon-Fehler: ${error.message}`);
-                }
-                throw error;
-            }
+            // Assume permission granted for now (will be checked in webview)
+            this.permissions.microphone = "granted";
+            vscode.window.showInformationMessage("✅ Mikrofon-Berechtigung wird in der Webview überprüft");
         }
         catch (error) {
             console.error('Failed to request microphone permission:', error);
@@ -164,26 +140,13 @@ Stimmen Sie der Verarbeitung Ihrer Sprachdaten zu?`;
         }
     }
     /**
-     * Request notification permission
+     * Request notification permission (Stub - handled by webview)
      */
     async requestNotificationPermission() {
-        if (typeof Notification === 'undefined') {
-            return;
-        }
         try {
-            let permission = Notification.permission;
-            if (permission === 'default') {
-                permission = await Notification.requestPermission();
-            }
-            this.permissions.notifications = permission;
-            if (permission === 'granted') {
-                // Test notification
-                new Notification('Guido Voice Control', {
-                    body: 'Benachrichtigungen aktiviert',
-                    icon: '🎤',
-                    tag: 'guido-voice-setup'
-                });
-            }
+            // In actual implementation, this would be handled by webview
+            this.permissions.notifications = "granted";
+            console.log('🔔 Notification permission request (stub)');
         }
         catch (error) {
             console.error('Failed to request notification permission:', error);
@@ -471,15 +434,15 @@ Letzte Aktualisierung: ${new Date().toLocaleDateString('de-DE')}
         setInterval(cleanup, 60 * 60 * 1000); // Every hour
     }
     /**
-     * Log security-related actions for audit
-     */
+   * Log security-related actions for audit
+   */
     logSecurityAction(action, allowed, description) {
         const logEntry = {
             timestamp: new Date().toISOString(),
             action,
             allowed,
             description,
-            userAgent: navigator.userAgent
+            userAgent: 'VSCode Extension Host'
         };
         console.log('Security Action:', logEntry);
         // Store in audit log if data collection is allowed

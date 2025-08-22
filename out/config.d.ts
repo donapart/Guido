@@ -1,6 +1,7 @@
 /**
  * Configuration loader and validation for Model Router
  */
+import { VoiceConfig } from "./voice/types";
 export interface ModelPrice {
     inputPerMTok: number;
     outputPerMTok: number;
@@ -68,7 +69,6 @@ export interface ProfileConfig {
         };
     };
 }
-import { VoiceConfig } from "./voice/types";
 export interface RouterConfig {
     version: number;
     activeProfile: string;

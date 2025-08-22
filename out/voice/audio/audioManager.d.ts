@@ -16,28 +16,28 @@ export declare class AudioManager {
      */
     initialize(): Promise<void>;
     /**
-     * Text-to-Speech functionality
+     * Text-to-Speech functionality (Webview communication stub)
      */
     speak(options: TTSOptions): Promise<void>;
     /**
-     * Stop current speech
+     * Stop current speech (Stub)
      */
     stopSpeaking(): void;
     /**
-     * Pause current speech
+     * Pause current speech (Stub)
      */
     pauseSpeaking(): void;
     /**
-     * Resume paused speech
+     * Resume paused speech (Stub)
      */
     resumeSpeaking(): void;
     /**
-     * Play confirmation beep
+     * Play confirmation beep (Stub - actual implementation in webview)
      */
     playBeep(sound?: BeepSound, volume?: number, duration?: number): Promise<void>;
     /**
-     * Play notification sound
-     */
+   * Play notification sound (Stub)
+   */
     playNotificationSound(type: 'info' | 'success' | 'warning' | 'error'): Promise<void>;
     /**
      * Set master volume
@@ -60,23 +60,23 @@ export declare class AudioManager {
      */
     isMutedState(): boolean;
     /**
-     * Get available voices
+     * Get available voices (Stub)
      */
-    getAvailableVoices(): SpeechSynthesisVoice[];
+    getAvailableVoices(): any[];
     /**
-     * Find best voice for language and preferences
+     * Find best voice for language and preferences (Stub)
      */
-    findBestVoice(language: string, gender?: string): SpeechSynthesisVoice | null;
+    findBestVoice(language: string, gender?: string): any | null;
     /**
-     * Test voice with sample text
+     * Test voice with sample text (Stub)
      */
-    testVoice(voice: SpeechSynthesisVoice, sampleText?: string): Promise<void>;
+    testVoice(voice: any, sampleText?: string): Promise<void>;
     /**
-     * Create audio visualizer data (for waveform display)
+     * Create audio visualizer data (Stub)
      */
-    createAudioVisualizer(): AudioAnalyser | null;
+    createAudioVisualizer(): any | null;
     /**
-     * Clean up resources
+     * Clean up resources (Stub)
      */
     destroy(): Promise<void>;
     private configureUtterance;
@@ -85,11 +85,6 @@ export declare class AudioManager {
     private getSampleTextForLanguage;
     private playTone;
     private sleep;
-}
-interface AudioAnalyser {
-    analyser: AnalyserNode;
-    bufferLength: number;
-    dataArray: Uint8Array;
 }
 export declare class AudioProcessor {
     /**
@@ -109,5 +104,4 @@ export declare class AudioProcessor {
      */
     static calculateVolumeLevel(audioData: Float32Array): number;
 }
-export {};
 //# sourceMappingURL=audioManager.d.ts.map

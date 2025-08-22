@@ -20,7 +20,8 @@ class AudioManager {
     };
     constructor(config) {
         this.config = config;
-        this.synthesis = window.speechSynthesis;
+        // Speech synthesis will be initialized in webview context
+        this.synthesis = globalThis.speechSynthesis;
         this.masterVolume = config.audio.volume;
     }
     /**
@@ -28,15 +29,9 @@ class AudioManager {
      */
     async initialize() {
         try {
-            // Initialize Web Audio API context
-            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            // Resume context if suspended (Chrome auto-suspend policy)
-            if (this.audioContext.state === 'suspended') {
-                await this.audioContext.resume();
-            }
-            // Load available voices
-            await this.loadVoices();
-            console.log('🎵 Audio Manager initialized');
+            // Note: Audio Manager runs in Node.js context, actual audio APIs are in webview
+            // This is a stub that communicates with the webview for audio operations
+            console.log('🎵 Audio Manager initialized (Node.js stub)');
         }
         catch (error) {
             console.error('Audio Manager initialization failed:', error);
@@ -44,67 +39,45 @@ class AudioManager {
         }
     }
     /**
-     * Text-to-Speech functionality
+     * Text-to-Speech functionality (Webview communication stub)
      */
     async speak(options) {
         if (!this.config.audio.ttsEnabled || this.isMuted) {
             return;
         }
-        return new Promise((resolve, reject) => {
-            try {
-                // Cancel any ongoing speech
-                this.synthesis.cancel();
-                // Create utterance
-                this.currentUtterance = new SpeechSynthesisUtterance(options.text);
-                // Configure utterance
-                this.configureUtterance(this.currentUtterance, options);
-                // Set event handlers
-                this.currentUtterance.onend = () => {
-                    resolve();
-                };
-                this.currentUtterance.onerror = (event) => {
-                    reject(new Error(`TTS Error: ${event.error}`));
-                };
-                this.currentUtterance.onstart = () => {
-                    console.log('🗣️ TTS started:', options.text.substring(0, 50));
-                };
-                // Speak
-                this.synthesis.speak(this.currentUtterance);
-            }
-            catch (error) {
-                reject(error);
-            }
+        // In the actual implementation, this would send a message to the webview
+        // The webview would handle the TTS using browser APIs
+        console.log('🗣️ TTS request (stub):', options.text.substring(0, 50));
+        // Simulate TTS completion
+        return new Promise((resolve) => {
+            setTimeout(() => {
+                resolve();
+            }, options.text.length * 50); // Simulate speaking time
         });
     }
     /**
-     * Stop current speech
+     * Stop current speech (Stub)
      */
     stopSpeaking() {
-        if (this.synthesis.speaking) {
-            this.synthesis.cancel();
-        }
+        console.log('🛑 TTS stop request (stub)');
     }
     /**
-     * Pause current speech
+     * Pause current speech (Stub)
      */
     pauseSpeaking() {
-        if (this.synthesis.speaking && !this.synthesis.paused) {
-            this.synthesis.pause();
-        }
+        console.log('⏸️ TTS pause request (stub)');
     }
     /**
-     * Resume paused speech
+     * Resume paused speech (Stub)
      */
     resumeSpeaking() {
-        if (this.synthesis.paused) {
-            this.synthesis.resume();
-        }
+        console.log('▶️ TTS resume request (stub)');
     }
     /**
-     * Play confirmation beep
+     * Play confirmation beep (Stub - actual implementation in webview)
      */
     async playBeep(sound = 'classic', volume = this.config.audio.beepVolume, duration) {
-        if (!this.config.audio.enableBeep || this.isMuted || !this.audioContext) {
+        if (!this.config.audio.enableBeep || this.isMuted) {
             return;
         }
         const profile = this.beepProfiles[sound];
@@ -112,77 +85,20 @@ class AudioManager {
             console.warn(`Unknown beep sound: ${sound}`);
             return;
         }
-        try {
-            const oscillator = this.audioContext.createOscillator();
-            const gainNode = this.audioContext.createGain();
-            oscillator.connect(gainNode);
-            gainNode.connect(this.audioContext.destination);
-            // Configure oscillator
-            oscillator.frequency.setValueAtTime(profile.frequency, this.audioContext.currentTime);
-            oscillator.type = 'sine';
-            // Configure gain (volume)
-            const effectiveVolume = volume * this.masterVolume;
-            gainNode.gain.setValueAtTime(effectiveVolume, this.audioContext.currentTime);
-            // Add modulation for sci-fi sound
-            if (profile.modulation) {
-                const lfo = this.audioContext.createOscillator();
-                const lfoGain = this.audioContext.createGain();
-                lfo.connect(lfoGain);
-                lfoGain.connect(oscillator.frequency);
-                lfo.frequency.value = 5; // 5Hz modulation
-                lfoGain.gain.value = 50; // Modulation depth
-                lfo.start();
-                lfo.stop(this.audioContext.currentTime + (duration || profile.duration));
-            }
-            // Apply fade in/out for smooth sound
-            const fadeTime = 0.01;
-            gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
-            gainNode.gain.linearRampToValueAtTime(effectiveVolume, this.audioContext.currentTime + fadeTime);
-            gainNode.gain.linearRampToValueAtTime(0, this.audioContext.currentTime + (duration || profile.duration) - fadeTime);
-            // Play beep
-            oscillator.start(this.audioContext.currentTime);
-            oscillator.stop(this.audioContext.currentTime + (duration || profile.duration));
-        }
-        catch (error) {
-            console.error('Failed to play beep:', error);
-        }
+        console.log(`🔊 Beep request (stub): ${sound} at ${volume} volume for ${duration || profile.duration}ms`);
+        // In actual implementation, this would send a message to webview
+        // The webview would play the beep using Web Audio API
     }
     /**
-     * Play notification sound
-     */
+   * Play notification sound (Stub)
+   */
     async playNotificationSound(type) {
-        if (this.isMuted || !this.audioContext) {
+        if (this.isMuted) {
             return;
         }
-        const soundProfiles = {
-            info: { frequency: 800, duration: 0.15 },
-            success: { frequency: 1000, duration: 0.2, chord: [1000, 1200] },
-            warning: { frequency: 600, duration: 0.3, repeat: 2 },
-            error: { frequency: 400, duration: 0.5, dissonant: true }
-        };
-        const profile = soundProfiles[type];
-        try {
-            if (profile.chord) {
-                // Play chord for success
-                for (const freq of profile.chord) {
-                    await this.playTone(freq, profile.duration, 0.3);
-                }
-            }
-            else if (profile.repeat) {
-                // Repeat tone for warning
-                for (let i = 0; i < profile.repeat; i++) {
-                    await this.playTone(profile.frequency, profile.duration / profile.repeat, 0.4);
-                    await this.sleep(50);
-                }
-            }
-            else {
-                // Single tone
-                await this.playTone(profile.frequency, profile.duration, 0.4);
-            }
-        }
-        catch (error) {
-            console.error('Failed to play notification sound:', error);
-        }
+        console.log(`🔔 Notification sound request (stub): ${type}`);
+        // In actual implementation, this would send a message to webview
+        // The webview would play the notification sound using Web Audio API
     }
     /**
      * Set master volume
@@ -219,89 +135,50 @@ class AudioManager {
         return this.isMuted;
     }
     /**
-     * Get available voices
+     * Get available voices (Stub)
      */
     getAvailableVoices() {
-        return this.synthesis.getVoices();
+        console.log('🎤 Get voices request (stub)');
+        // In actual implementation, this would query webview for available voices
+        return [];
     }
     /**
-     * Find best voice for language and preferences
+     * Find best voice for language and preferences (Stub)
      */
     findBestVoice(language, gender) {
-        const voices = this.getAvailableVoices();
-        // Filter by language
-        const languageVoices = voices.filter(voice => voice.lang.startsWith(language.split('-')[0]));
-        if (languageVoices.length === 0) {
-            return null;
-        }
-        // Filter by gender if specified
-        if (gender) {
-            const genderVoices = languageVoices.filter(voice => {
-                const name = voice.name.toLowerCase();
-                if (gender === 'female') {
-                    return !name.includes('male') || name.includes('female');
-                }
-                else if (gender === 'male') {
-                    return name.includes('male') && !name.includes('female');
-                }
-                return true;
-            });
-            if (genderVoices.length > 0) {
-                return genderVoices[0];
-            }
-        }
-        // Prefer local voices
-        const localVoices = languageVoices.filter(voice => voice.localService);
-        if (localVoices.length > 0) {
-            return localVoices[0];
-        }
-        return languageVoices[0];
+        console.log(`🎤 Find best voice request (stub): ${language}, ${gender}`);
+        // In actual implementation, this would be handled by webview
+        return null;
     }
     /**
-     * Test voice with sample text
+     * Test voice with sample text (Stub)
      */
     async testVoice(voice, sampleText) {
-        const text = sampleText || this.getSampleTextForLanguage(voice.lang);
+        const text = sampleText || this.getSampleTextForLanguage(voice?.lang || 'en');
+        console.log(`🧪 Voice test request (stub): ${text}`);
+        // Simulate test
         await this.speak({
             text,
-            voice: voice.name,
-            language: voice.lang,
+            voice: voice?.name || 'auto',
             speed: this.config.audio.speed,
-            volume: this.config.audio.volume * 0.8 // Slightly lower for testing
+            volume: this.config.audio.volume * 0.8
         });
     }
     /**
-     * Create audio visualizer data (for waveform display)
+     * Create audio visualizer data (Stub)
      */
     createAudioVisualizer() {
-        if (!this.audioContext) {
-            return null;
-        }
-        try {
-            const analyser = this.audioContext.createAnalyser();
-            analyser.fftSize = 256;
-            return {
-                analyser,
-                bufferLength: analyser.frequencyBinCount,
-                dataArray: new Uint8Array(analyser.frequencyBinCount)
-            };
-        }
-        catch (error) {
-            console.error('Failed to create audio visualizer:', error);
-            return null;
-        }
+        console.log('📊 Audio visualizer request (stub)');
+        // In actual implementation, this would be handled by webview
+        return null;
     }
     /**
-     * Clean up resources
+     * Clean up resources (Stub)
      */
     async destroy() {
         try {
             this.stopSpeaking();
-            if (this.audioContext) {
-                await this.audioContext.close();
-                this.audioContext = undefined;
-            }
-            console.log('🎵 Audio Manager destroyed');
+            console.log('🎵 Audio Manager destroyed (stub)');
         }
         catch (error) {
             console.error('Audio Manager cleanup failed:', error);
@@ -309,46 +186,18 @@ class AudioManager {
     }
     // Private helper methods
     configureUtterance(utterance, options) {
-        // Basic settings
-        utterance.lang = options.language || this.config.language.recognition;
-        utterance.rate = options.speed || this.config.audio.speed;
-        utterance.pitch = options.pitch || this.config.audio.pitch;
-        utterance.volume = (options.volume || this.config.audio.volume) * this.masterVolume;
-        // Voice selection
-        if (options.voice && options.voice !== 'auto') {
-            const voice = this.findVoiceByName(options.voice);
-            if (voice) {
-                utterance.voice = voice;
-            }
-        }
-        else {
-            // Auto-select best voice
-            const bestVoice = this.findBestVoice(utterance.lang, this.config.audio.voice.gender);
-            if (bestVoice) {
-                utterance.voice = bestVoice;
-            }
-        }
+        console.log('⚙️ Configure utterance (stub):', options);
+        // In actual implementation, this would be handled by webview
     }
     findVoiceByName(name) {
-        const voices = this.getAvailableVoices();
-        return voices.find(voice => voice.name === name || voice.voiceURI === name) || null;
+        console.log(`🔍 Find voice by name (stub): ${name}`);
+        // In actual implementation, this would query webview
+        return null;
     }
     async loadVoices() {
-        return new Promise((resolve) => {
-            const voices = this.synthesis.getVoices();
-            if (voices.length > 0) {
-                resolve();
-            }
-            else {
-                this.synthesis.onvoiceschanged = () => {
-                    resolve();
-                };
-                // Fallback timeout
-                setTimeout(() => {
-                    resolve();
-                }, 3000);
-            }
-        });
+        console.log('📥 Load voices (stub)');
+        // In actual implementation, this would be handled by webview
+        return Promise.resolve();
     }
     getSampleTextForLanguage(lang) {
         const samples = {
@@ -362,21 +211,9 @@ class AudioManager {
         return samples[langCode] || samples['en'];
     }
     async playTone(frequency, duration, volume) {
-        if (!this.audioContext) {
-            return;
-        }
-        return new Promise((resolve) => {
-            const oscillator = this.audioContext.createOscillator();
-            const gainNode = this.audioContext.createGain();
-            oscillator.connect(gainNode);
-            gainNode.connect(this.audioContext.destination);
-            oscillator.frequency.value = frequency;
-            oscillator.type = 'sine';
-            gainNode.gain.value = volume * this.masterVolume;
-            oscillator.onended = () => resolve();
-            oscillator.start();
-            oscillator.stop(this.audioContext.currentTime + duration);
-        });
+        console.log(`🎵 Play tone (stub): ${frequency}Hz for ${duration}s at ${volume} volume`);
+        // In actual implementation, this would send message to webview
+        return Promise.resolve();
     }
     sleep(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));

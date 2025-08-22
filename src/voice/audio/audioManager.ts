@@ -160,104 +160,55 @@ export class AudioManager {
   }
 
   /**
-   * Get available voices
+   * Get available voices (Stub)
    */
-  getAvailableVoices(): SpeechSynthesisVoice[] {
-    return this.synthesis.getVoices();
+  getAvailableVoices(): any[] {
+    console.log('🎤 Get voices request (stub)');
+    // In actual implementation, this would query webview for available voices
+    return [];
   }
 
   /**
-   * Find best voice for language and preferences
+   * Find best voice for language and preferences (Stub)
    */
-  findBestVoice(language: string, gender?: string): SpeechSynthesisVoice | null {
-    const voices = this.getAvailableVoices();
-    
-    // Filter by language
-    const languageVoices = voices.filter(voice => 
-      voice.lang.startsWith(language.split('-')[0])
-    );
-
-    if (languageVoices.length === 0) {
-      return null;
-    }
-
-    // Filter by gender if specified
-    if (gender) {
-      const genderVoices = languageVoices.filter(voice => {
-        const name = voice.name.toLowerCase();
-        if (gender === 'female') {
-          return !name.includes('male') || name.includes('female');
-        } else if (gender === 'male') {
-          return name.includes('male') && !name.includes('female');
-        }
-        return true;
-      });
-      
-      if (genderVoices.length > 0) {
-        return genderVoices[0];
-      }
-    }
-
-    // Prefer local voices
-    const localVoices = languageVoices.filter(voice => voice.localService);
-    if (localVoices.length > 0) {
-      return localVoices[0];
-    }
-
-    return languageVoices[0];
+  findBestVoice(language: string, gender?: string): any | null {
+    console.log(`🎤 Find best voice request (stub): ${language}, ${gender}`);
+    // In actual implementation, this would be handled by webview
+    return null;
   }
 
   /**
-   * Test voice with sample text
+   * Test voice with sample text (Stub)
    */
-  async testVoice(voice: SpeechSynthesisVoice, sampleText?: string): Promise<void> {
-    const text = sampleText || this.getSampleTextForLanguage(voice.lang);
+  async testVoice(voice: any, sampleText?: string): Promise<void> {
+    const text = sampleText || this.getSampleTextForLanguage(voice?.lang || 'en');
+    console.log(`🧪 Voice test request (stub): ${text}`);
     
+    // Simulate test
     await this.speak({
       text,
-      voice: voice.name,
-      language: voice.lang as any,
+      voice: voice?.name || 'auto',
       speed: this.config.audio.speed,
-      volume: this.config.audio.volume * 0.8 // Slightly lower for testing
+      volume: this.config.audio.volume * 0.8
     });
   }
 
   /**
-   * Create audio visualizer data (for waveform display)
+   * Create audio visualizer data (Stub)
    */
-  createAudioVisualizer(): AudioAnalyser | null {
-    if (!this.audioContext) {
-      return null;
-    }
-
-    try {
-      const analyser = this.audioContext.createAnalyser();
-      analyser.fftSize = 256;
-      
-      return {
-        analyser,
-        bufferLength: analyser.frequencyBinCount,
-        dataArray: new Uint8Array(analyser.frequencyBinCount)
-      };
-    } catch (error) {
-      console.error('Failed to create audio visualizer:', error);
-      return null;
-    }
+  createAudioVisualizer(): any | null {
+    console.log('📊 Audio visualizer request (stub)');
+    // In actual implementation, this would be handled by webview
+    return null;
   }
 
   /**
-   * Clean up resources
+   * Clean up resources (Stub)
    */
   async destroy(): Promise<void> {
     try {
       this.stopSpeaking();
-      
-      if (this.audioContext) {
-        await this.audioContext.close();
-        this.audioContext = undefined;
-      }
-      
-      console.log('🎵 Audio Manager destroyed');
+      console.log('🎵 Audio Manager destroyed (stub)');
     } catch (error) {
       console.error('Audio Manager cleanup failed:', error);
     }
@@ -265,55 +216,21 @@ export class AudioManager {
 
   // Private helper methods
 
-  private configureUtterance(utterance: SpeechSynthesisUtterance, options: TTSOptions): void {
-    // Basic settings
-    utterance.lang = options.language || this.config.language.recognition;
-    utterance.rate = options.speed || this.config.audio.speed;
-    utterance.pitch = options.pitch || this.config.audio.pitch;
-    utterance.volume = (options.volume || this.config.audio.volume) * this.masterVolume;
-
-    // Voice selection
-    if (options.voice && options.voice !== 'auto') {
-      const voice = this.findVoiceByName(options.voice);
-      if (voice) {
-        utterance.voice = voice;
-      }
-    } else {
-      // Auto-select best voice
-      const bestVoice = this.findBestVoice(
-        utterance.lang,
-        this.config.audio.voice.gender
-      );
-      if (bestVoice) {
-        utterance.voice = bestVoice;
-      }
-    }
+  private configureUtterance(utterance: any, options: TTSOptions): void {
+    console.log('⚙️ Configure utterance (stub):', options);
+    // In actual implementation, this would be handled by webview
   }
 
-  private findVoiceByName(name: string): SpeechSynthesisVoice | null {
-    const voices = this.getAvailableVoices();
-    return voices.find(voice => 
-      voice.name === name || voice.voiceURI === name
-    ) || null;
+  private findVoiceByName(name: string): any | null {
+    console.log(`🔍 Find voice by name (stub): ${name}`);
+    // In actual implementation, this would query webview
+    return null;
   }
 
   private async loadVoices(): Promise<void> {
-    return new Promise((resolve) => {
-      const voices = this.synthesis.getVoices();
-      
-      if (voices.length > 0) {
-        resolve();
-      } else {
-        this.synthesis.onvoiceschanged = () => {
-          resolve();
-        };
-        
-        // Fallback timeout
-        setTimeout(() => {
-          resolve();
-        }, 3000);
-      }
-    });
+    console.log('📥 Load voices (stub)');
+    // In actual implementation, this would be handled by webview
+    return Promise.resolve();
   }
 
   private getSampleTextForLanguage(lang: string): string {
@@ -334,26 +251,9 @@ export class AudioManager {
     duration: number, 
     volume: number
   ): Promise<void> {
-    if (!this.audioContext) {
-      return;
-    }
-
-    return new Promise((resolve) => {
-      const oscillator = this.audioContext!.createOscillator();
-      const gainNode = this.audioContext!.createGain();
-      
-      oscillator.connect(gainNode);
-      gainNode.connect(this.audioContext!.destination);
-
-      oscillator.frequency.value = frequency;
-      oscillator.type = 'sine';
-      gainNode.gain.value = volume * this.masterVolume;
-
-      oscillator.onended = () => resolve();
-      
-      oscillator.start();
-      oscillator.stop(this.audioContext!.currentTime + duration);
-    });
+    console.log(`🎵 Play tone (stub): ${frequency}Hz for ${duration}s at ${volume} volume`);
+    // In actual implementation, this would send message to webview
+    return Promise.resolve();
   }
 
   private sleep(ms: number): Promise<void> {

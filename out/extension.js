@@ -49,8 +49,11 @@ const router_1 = require("./router");
 const secret_1 = require("./secret");
 const voiceController_1 = require("./voice/voiceController");
 let state;
+let extensionContext;
 async function activate(context) {
     console.log("Aktiviere Model Router Extension...");
+    // Store extension context globally
+    extensionContext = context;
     // Initialize extension state
     state = {
         providers: new Map(),
@@ -595,7 +598,7 @@ async function initializeVoiceControl(voiceConfig) {
         if (!state.router) {
             throw new Error("Router muss initialisiert sein bevor Voice Control gestartet werden kann");
         }
-        state.voiceController = new voiceController_1.VoiceController(context, voiceConfig, state.router);
+        state.voiceController = new voiceController_1.VoiceController(extensionContext, voiceConfig, state.router);
         await state.voiceController.initialize();
         state.outputChannel.appendLine("✅ Voice Control initialisiert");
     }

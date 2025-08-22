@@ -4,7 +4,7 @@
 export type SupportedLanguage = "de-DE" | "en-US" | "fr-FR" | "es-ES" | "it-IT";
 export type ResponseLanguage = "de" | "en" | "fr" | "es" | "it";
 export type VoiceGender = "male" | "female" | "neutral";
-export type BeepSound = "classic" | "modern" | "sci-fi" | "gentle" | "off";
+export type BeepSound = "classic" | "modern" | "sci-fi" | "gentle";
 export type TTSEngine = "system" | "azure" | "elevenlabs" | "local";
 export type QualityPreset = "low" | "medium" | "high" | "ultra";
 export type PersonalityMode = "professional" | "friendly" | "casual" | "technical";

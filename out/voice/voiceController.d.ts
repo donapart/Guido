@@ -3,8 +3,8 @@
  * Verwaltet Wake Word Detection, Recording, Processing und TTS
  */
 import * as vscode from "vscode";
-import { VoiceConfig, VoiceState, VoiceEvent, VoiceSession, VoiceStats } from "./types";
 import { ModelRouter } from "../router";
+import { VoiceConfig, VoiceEvent, VoiceSession, VoiceState, VoiceStats } from "./types";
 export declare class VoiceController {
     private context;
     private state;
@@ -105,6 +105,10 @@ export declare class VoiceController {
     private getLanguageFromContext;
     private calculateMaxTokens;
     private updateStats;
+    /**
+     * Setup wake word detection system
+     */
+    private setupWakeWordDetection;
     private registerDefaultCommands;
 }
 //# sourceMappingURL=voiceController.d.ts.map

@@ -19,11 +19,11 @@ export declare class VoicePermissionManager {
      */
     requestGDPRConsent(): Promise<boolean>;
     /**
-     * Request microphone permission
-     */
+   * Request microphone permission (Stub - handled by webview)
+   */
     requestMicrophonePermission(): Promise<void>;
     /**
-     * Request notification permission
+     * Request notification permission (Stub - handled by webview)
      */
     requestNotificationPermission(): Promise<void>;
     /**
@@ -87,8 +87,8 @@ export declare class VoicePermissionManager {
      */
     private scheduleDataCleanup;
     /**
-     * Log security-related actions for audit
-     */
+   * Log security-related actions for audit
+   */
     private logSecurityAction;
     /**
      * Check working hours on startup
