@@ -83,14 +83,14 @@ export class AudioManager {
   }
 
   /**
-   * Play confirmation beep
+   * Play confirmation beep (Stub - actual implementation in webview)
    */
   async playBeep(
     sound: BeepSound = 'classic',
     volume: number = this.config.audio.beepVolume,
     duration?: number
   ): Promise<void> {
-    if (!this.config.audio.enableBeep || this.isMuted || !this.audioContext) {
+    if (!this.config.audio.enableBeep || this.isMuted) {
       return;
     }
 
@@ -100,87 +100,24 @@ export class AudioManager {
       return;
     }
 
-    try {
-      const oscillator = this.audioContext.createOscillator();
-      const gainNode = this.audioContext.createGain();
-      
-      oscillator.connect(gainNode);
-      gainNode.connect(this.audioContext.destination);
-
-      // Configure oscillator
-      oscillator.frequency.setValueAtTime(profile.frequency, this.audioContext.currentTime);
-      oscillator.type = 'sine';
-
-      // Configure gain (volume)
-      const effectiveVolume = volume * this.masterVolume;
-      gainNode.gain.setValueAtTime(effectiveVolume, this.audioContext.currentTime);
-
-      // Add modulation for sci-fi sound
-      if (profile.modulation) {
-        const lfo = this.audioContext.createOscillator();
-        const lfoGain = this.audioContext.createGain();
-        
-        lfo.connect(lfoGain);
-        lfoGain.connect(oscillator.frequency);
-        
-        lfo.frequency.value = 5; // 5Hz modulation
-        lfoGain.gain.value = 50; // Modulation depth
-        
-        lfo.start();
-        lfo.stop(this.audioContext.currentTime + (duration || profile.duration));
-      }
-
-      // Apply fade in/out for smooth sound
-      const fadeTime = 0.01;
-      gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
-      gainNode.gain.linearRampToValueAtTime(effectiveVolume, this.audioContext.currentTime + fadeTime);
-      gainNode.gain.linearRampToValueAtTime(0, this.audioContext.currentTime + (duration || profile.duration) - fadeTime);
-
-      // Play beep
-      oscillator.start(this.audioContext.currentTime);
-      oscillator.stop(this.audioContext.currentTime + (duration || profile.duration));
-
-    } catch (error) {
-      console.error('Failed to play beep:', error);
-    }
+    console.log(`🔊 Beep request (stub): ${sound} at ${volume} volume for ${duration || profile.duration}ms`);
+    
+    // In actual implementation, this would send a message to webview
+    // The webview would play the beep using Web Audio API
   }
 
      /**
-    * Play notification sound
+    * Play notification sound (Stub)
     */
    async playNotificationSound(type: 'info' | 'success' | 'warning' | 'error'): Promise<void> {
-     if (this.isMuted || !this.audioContext) {
+     if (this.isMuted) {
        return;
      }
 
-     const soundProfiles: Record<string, any> = {
-       info: { frequency: 800, duration: 0.15 },
-       success: { frequency: 1000, duration: 0.2, chord: [1000, 1200] },
-       warning: { frequency: 600, duration: 0.3, repeat: 2 },
-       error: { frequency: 400, duration: 0.5, dissonant: true }
-     };
-
-     const profile = soundProfiles[type];
+     console.log(`🔔 Notification sound request (stub): ${type}`);
      
-     try {
-       if (profile.chord) {
-         // Play chord for success
-         for (const freq of profile.chord) {
-           await this.playTone(freq, profile.duration, 0.3);
-         }
-       } else if (profile.repeat) {
-         // Repeat tone for warning
-         for (let i = 0; i < profile.repeat; i++) {
-           await this.playTone(profile.frequency, profile.duration / profile.repeat, 0.4);
-           await this.sleep(50);
-         }
-       } else {
-         // Single tone
-         await this.playTone(profile.frequency, profile.duration, 0.4);
-       }
-     } catch (error) {
-       console.error('Failed to play notification sound:', error);
-     }
+     // In actual implementation, this would send a message to webview
+     // The webview would play the notification sound using Web Audio API
    }
 
   /**
