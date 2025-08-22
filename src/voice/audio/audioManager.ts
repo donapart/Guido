@@ -180,43 +180,43 @@ export class AudioManager {
     }
   }
 
-  /**
-   * Play notification sound
-   */
-  async playNotificationSound(type: 'info' | 'success' | 'warning' | 'error'): Promise<void> {
-    if (this.isMuted || !this.audioContext) {
-      return;
-    }
+     /**
+    * Play notification sound
+    */
+   async playNotificationSound(type: 'info' | 'success' | 'warning' | 'error'): Promise<void> {
+     if (this.isMuted || !this.audioContext) {
+       return;
+     }
 
-    const soundProfiles = {
-      info: { frequency: 800, duration: 0.15 },
-      success: { frequency: 1000, duration: 0.2, chord: [1000, 1200] },
-      warning: { frequency: 600, duration: 0.3, repeat: 2 },
-      error: { frequency: 400, duration: 0.5, dissonant: true }
-    };
+     const soundProfiles: Record<string, any> = {
+       info: { frequency: 800, duration: 0.15 },
+       success: { frequency: 1000, duration: 0.2, chord: [1000, 1200] },
+       warning: { frequency: 600, duration: 0.3, repeat: 2 },
+       error: { frequency: 400, duration: 0.5, dissonant: true }
+     };
 
-    const profile = soundProfiles[type];
-    
-    try {
-      if (profile.chord) {
-        // Play chord for success
-        for (const freq of profile.chord) {
-          await this.playTone(freq, profile.duration, 0.3);
-        }
-      } else if (profile.repeat) {
-        // Repeat tone for warning
-        for (let i = 0; i < profile.repeat; i++) {
-          await this.playTone(profile.frequency, profile.duration / profile.repeat, 0.4);
-          await this.sleep(50);
-        }
-      } else {
-        // Single tone
-        await this.playTone(profile.frequency, profile.duration, 0.4);
-      }
-    } catch (error) {
-      console.error('Failed to play notification sound:', error);
-    }
-  }
+     const profile = soundProfiles[type];
+     
+     try {
+       if (profile.chord) {
+         // Play chord for success
+         for (const freq of profile.chord) {
+           await this.playTone(freq, profile.duration, 0.3);
+         }
+       } else if (profile.repeat) {
+         // Repeat tone for warning
+         for (let i = 0; i < profile.repeat; i++) {
+           await this.playTone(profile.frequency, profile.duration / profile.repeat, 0.4);
+           await this.sleep(50);
+         }
+       } else {
+         // Single tone
+         await this.playTone(profile.frequency, profile.duration, 0.4);
+       }
+     } catch (error) {
+       console.error('Failed to play notification sound:', error);
+     }
+   }
 
   /**
    * Set master volume

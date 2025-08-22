@@ -29,7 +29,7 @@ profiles:
       audio:
         # Bestätigungstöne
         enableBeep: true
-        beepSound: "classic"               # classic, modern, sci-fi, gentle, off
+        beepSound: "classic"               # classic, modern, sci-fi, gentle
         beepVolume: 0.4                    # 0.0-1.0
         beepDuration: 200                  # Millisekunden
         
