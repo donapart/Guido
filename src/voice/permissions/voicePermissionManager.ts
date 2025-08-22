@@ -4,7 +4,11 @@
  */
 
 import * as vscode from "vscode";
-import { VoiceConfig, PermissionStatus, VoicePermissionsConfig } from "../types";
+import {
+  PermissionStatus,
+  VoiceConfig,
+  VoicePermissionsConfig,
+} from "../types";
 
 export class VoicePermissionManager {
   private config: VoicePermissionsConfig;

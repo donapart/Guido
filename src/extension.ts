@@ -14,6 +14,8 @@ import { OpenAICompatProvider } from "./providers/openaiCompat";
 import { OllamaProvider } from "./providers/ollama";
 import { Provider } from "./providers/base";
 import { createModelRouterMcpServer } from "./mcp/server";
+import { VoiceController } from "./voice/voiceController";
+import { VoiceConfig } from "./voice/types";
 
 interface ExtensionState {
   router?: ModelRouter;
@@ -21,6 +23,7 @@ interface ExtensionState {
   statusBar: vscode.StatusBarItem;
   budgetManager: BudgetManager;
   classifier?: PromptClassifier;
+  voiceController?: VoiceController;
   mcpServer?: any;
   currentMode: string;
   outputChannel: vscode.OutputChannel;
@@ -105,6 +108,13 @@ function registerCommands(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("modelRouter.simulateRouting", handleSimulateRoutingCommand),
     vscode.commands.registerCommand("modelRouter.importApiKeys", handleImportApiKeysCommand),
     vscode.commands.registerCommand("modelRouter.exportConfig", handleExportConfigCommand),
+    
+    // Voice Control Commands
+    vscode.commands.registerCommand("modelRouter.startVoiceControl", handleStartVoiceControlCommand),
+    vscode.commands.registerCommand("modelRouter.stopVoiceControl", handleStopVoiceControlCommand),
+    vscode.commands.registerCommand("modelRouter.toggleVoiceControl", handleToggleVoiceControlCommand),
+    vscode.commands.registerCommand("modelRouter.voiceSettings", handleVoiceSettingsCommand),
+    vscode.commands.registerCommand("modelRouter.voicePermissions", handleVoicePermissionsCommand),
   ];
 
   context.subscriptions.push(...commands);
@@ -153,7 +163,12 @@ async function loadConfiguration(): Promise<void> {
     state.currentMode = profile.mode;
     updateStatusBar();
 
-    state.outputChannel.appendLine(`Konfiguration geladen: ${profile.providers.length} Provider, Modus: ${profile.mode}`);
+    // Initialize voice control if enabled
+    if (profile.voice?.enabled) {
+      await initializeVoiceControl(profile.voice);
+    }
+
+    state.outputChannel.appendLine(`Konfiguration geladen: ${profile.providers.length} Provider, Modus: ${profile.mode}${profile.voice?.enabled ? ', Voice: aktiv' : ''}`);
 
   } catch (error) {
     if (error instanceof ConfigError) {

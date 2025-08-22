@@ -69,6 +69,7 @@ export interface ProfileConfig {
   mode: "auto" | "speed" | "quality" | "cheap" | "local-only" | "offline" | "privacy-strict";
   budget?: BudgetConfig;
   privacy?: PrivacyConfig;
+  voice?: VoiceConfig; // Voice configuration
   providers: ProviderConfig[];
   routing: {
     rules: RoutingRule[];
@@ -78,6 +79,9 @@ export interface ProfileConfig {
     };
   };
 }
+
+// Import VoiceConfig from voice types
+import { VoiceConfig } from "./voice/types";
 
 export interface RouterConfig {
   version: number;
