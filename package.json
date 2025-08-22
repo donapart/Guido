@@ -77,6 +77,27 @@
           "type": "boolean",
           "default": true,
           "description": "Andockbare Chat-Ansicht (Explorer) anzeigen"
+        },
+        "modelRouter.chat.attachment.maxFiles": {
+          "type": "number",
+          "default": 5,
+          "description": "Maximale Anzahl Anhänge, die zusammengefasst werden"
+        },
+        "modelRouter.chat.attachment.maxSnippetBytes": {
+          "type": "number",
+          "default": 8192,
+          "description": "Maximale Anzahl Bytes pro Anhang für Vorschau/Snippet"
+        },
+        "modelRouter.chat.attachment.redactSecrets": {
+          "type": "boolean",
+          "default": true,
+          "description": "Geheime Tokens/API-Keys in Anhängen automatisch schwärzen"
+        },
+        "modelRouter.chat.attachment.additionalRedactPatterns": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Zusätzliche Regex-Pattern für Geheimnis-Redaktion"
         }
       }
     },
@@ -160,6 +181,16 @@
         "command": "modelRouter.chat.planCurrent",
         "title": "Model Router: Plan / Agent aus letztem Prompt",
         "icon": "$(rocket)"
+      },
+      {
+        "command": "modelRouter.chat.executePlan",
+        "title": "Model Router: Ausgeführten Plan starten",
+        "icon": "$(run-all)"
+      },
+      {
+        "command": "modelRouter.chat.cancelPlanExecution",
+        "title": "Model Router: Plan-Ausführung abbrechen",
+        "icon": "$(debug-stop)"
       }
     ],
     "menus": {
@@ -223,6 +254,14 @@
         {
           "command": "modelRouter.chat.planCurrent",
           "icon": "$(rocket)"
+        },
+        {
+          "command": "modelRouter.chat.executePlan",
+          "icon": "$(run-all)"
+        },
+        {
+          "command": "modelRouter.chat.cancelPlanExecution",
+          "icon": "$(debug-stop)"
         }
       ]
     },

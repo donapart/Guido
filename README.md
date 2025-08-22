@@ -35,15 +35,23 @@ Eine intelligente VSCode-Extension, die **automatisch das optimale KI-Modell** f
 - **Datenschutz-Filter** für sensible Dateipfade
 - **Keine Klartext-Speicherung** von Geheimnissen
 
-### 🎨 Benutzerfreundlichkeit
-- **Statusbar-Integration** mit aktuellem Modus
-- **QuickPick-Menüs** für Provider/Modell-Override
-- **Output-Channel** für detaillierte Logs
-- **Command Palette** Integration
+### 🎨 Benutzerfreundlichkeit & UI
+
+- **Webview Chat Panel** (floating) & **andockbare Chat-View** im Explorer
+- **Model Override Dropdown** direkt im Chat
+- **Anhänge-Zusammenfassung** (Snippet, Secret-Redaktion konfigurierbar)
+- **Kosten-Footer** mit tatsächlichen Tokenwerten
+- **Tools-Menü** (Routing-Simulation, Budget, Resend, Clear)
+- **Plan / Agent**: Schrittplan generieren (Ausbau geplant: Ausführung)
+- **Voice-State Indikator** (idle / listening / recording / processing)
+- **Statusbar-Integration** (Modus + optional Budget)
+- **QuickPrompt-Kompaktmodus** für schnelle Prompts ohne Panel
+- **Command Palette** Integration kompletter Funktionen
 
 ## 🚀 Installation
 
 ### 1. Voraussetzungen
+
 - VSCode 1.90.0 oder neuer
 - Node.js 20+ (für Entwicklung)
 - Optional: Ollama für lokale Modelle
@@ -51,6 +59,7 @@ Eine intelligente VSCode-Extension, die **automatisch das optimale KI-Modell** f
 ### 2. Extension installieren
 
 #### Entwicklungsversion (empfohlen)
+
 ```bash
 # Repository klonen
 git clone <repository-url>
@@ -67,6 +76,7 @@ npm run compile
 ```
 
 #### Aus Package installieren
+
 ```bash
 # Extension packen
 npm run package
@@ -166,11 +176,13 @@ profiles:
 ## 🔑 API-Keys einrichten
 
 ### Methode 1: Command Palette
+
 1. `Ctrl+Shift+P` → "Model Router: Set API Key"
 2. Provider-ID eingeben (z.B. `openai`)
 3. API-Key eingeben
 
 ### Methode 2: Umgebungsvariablen
+
 ```bash
 # .env oder System-Umgebung
 export OPENAI_API_KEY="sk-..."
@@ -192,30 +204,116 @@ Dann: `Ctrl+Shift+P` → "Model Router: Import API Keys"
 
 ## 🎮 Nutzung
 
-### Chat-Interface
+### Chat-Interface Varianten
+
+1. Panel (floating):
+
+```text
+Ctrl+Shift+P → "Model Router: Open Chat UI"
 ```
-Ctrl+Shift+P → "Model Router: Chat"
+
+1. Docked View (Explorer): automatisch sichtbar falls Einstellung aktiv (`modelRouter.chat.showDockView`).
+
+Funktionen im Chat:
+
+- Eingabefeld mit Shift+Enter = Zeilenumbruch, Enter = Senden
+- Toolbar Buttons: Tools, Mikrofon (Voice starten), Speaker (Placeholder), Attach (Dateien auswählen), Plan, Settings
+- Modell-Auswahl (Override) oben links (`auto` = Router entscheidet)
+- Anhänge werden vor Versand auf max. Anzahl/Größe gekürzt und Geheimnisse (Regex) geschwärzt
+- Streaming der Antwort in Nachricht, Abschluss zeigt Token & Kosten
+- Info-Messages (Simulation, Plan, Budget) erscheinen kursiv
+
+QuickPrompt (Kompaktmodus):
+
+```text
+Einstellung: "modelRouter.chat.compactMode": true
+Command: "Model Router: Quick Prompt (Kompaktmodus)"
 ```
-- Prompt eingeben
-- Extension wählt automatisch das beste Modell
-- Live-Kostenschätzung und Begründung
-- Streaming-Response im Output-Channel
+Sendet Prompt ohne zuerst Panel zu öffnen. Falls Chat offen ist, wird dort gestreamt, sonst Output-Channel.
+### Docked Chat View
+
+Die andockbare Ansicht (`💬 Model Router Chat (Dock)`) zeigt denselben Verlauf wie das Panel. Beide Oberflächen sind synchron (Modelle, History, Streaming). Zum Ausblenden: Rechtsklick auf Titel → Hide oder Einstellung `modelRouter.chat.showDockView` deaktivieren.
+
+### Tools-Menü
+
+Command oder Toolbar → Optionen:
+
+- Routing-Simulation (zeigt ausgewähltes Modell + Alternativen)
+- Kosten / Budget Übersicht (heute / Monat / total)
+- Letzte Antwort erneut senden
+- Verlauf löschen (auch Persistenz zurückgesetzt)
+
+### Plan / Agent
+
+Erzeugt einen nummerierten Plan (max 7 Schritte). Aktuell nur Planung; zukünftige Version führt Schritte sequenziell aus mit Zwischen-Feedback.
+
+### Anhänge & Redaktion
+
+Konfigurierbar über Einstellungen:
+
+```json
+{
+  "modelRouter.chat.attachment.maxFiles": 5,
+  "modelRouter.chat.attachment.maxSnippetBytes": 8192,
+  "modelRouter.chat.attachment.redactSecrets": true,
+  "modelRouter.chat.attachment.additionalRedactPatterns": [
+    "(?i)password\\s*[:=]\\s*['\"]?[A-Za-z0-9!@#$%^&*_-]{6,}"
+  ]
+}
+```
+Zu große Dateien (>512KB) werden übersprungen. Nur die ersten N Bytes (Snippet) werden angezeigt. Geheimnisse durch Regex → `[REDACTED]`.
+
+### Persistenter Verlauf
+
+`modelRouter.chat.persistHistory`: speichert die letzten 1000 Nachrichten (user/assistant) in globalState. Abschaltbar für Privacy.
+
+### Voice-State Integration
+
+Wenn Voice aktiviert ist (Konfig), wird der Zustand live im Chat angezeigt (idle/listening/recording/processing). Wechsel per Voice Commands / Toolbar.
+
+### Neue Commands (Zusatz)
+
+| Command | Zweck |
+|---------|-------|
+| Model Router: Open Chat UI | Panel öffnen |
+| Model Router: Quick Prompt (Kompaktmodus) | Schneller Prompt ohne Panel |
+| Model Router: Chat Tools | Tools-Menü |
+| Model Router: Plan / Agent aus letztem Prompt | Plan generieren |
+| Model Router: Ausgeführten Plan starten | (Platzhalter zukünftige Ausführung) |
+| Model Router: Plan-Ausführung abbrechen | Stoppt geplante Ausführung (geplant) |
+
+### Relevante Einstellungen (Erweiterung)
+
+| Einstellung | Beschreibung |
+|------------|--------------|
+| modelRouter.chat.compactMode | QuickPrompt statt Panel-Fluss |
+| modelRouter.chat.persistHistory | Verlauf zwischen Sessions speichern |
+| modelRouter.chat.showDockView | Docked Chat im Explorer |
+| modelRouter.chat.attachment.maxFiles | Max. Anzahl Anhänge |
+| modelRouter.chat.attachment.maxSnippetBytes | Snippet-Limit pro Datei |
+| modelRouter.chat.attachment.redactSecrets | Aktiviert automatische Geheimnis-Redaktion |
+| modelRouter.chat.attachment.additionalRedactPatterns | Zusätzliche Regexe |
 
 ### Einmaliges Routing
-```
+
+```text
 Ctrl+Shift+P → "Model Router: Route Prompt Once"
 ```
+
 - Text im Editor auswählen
 - Modellvorschlag ohne Ausführung
 - Zeigt Score und Begründung
 
 ### Modi wechseln
+
 Klick auf Statusbar oder:
-```
+
+```text
 Ctrl+Shift+P → "Model Router: Switch Mode"
 ```
 
 **Verfügbare Modi:**
+
 - `auto` – Intelligente Auswahl basierend auf Kontext
 - `speed` – Schnellste verfügbare Modelle
 - `quality` – Hochwertigste Modelle (teurer)
@@ -295,6 +393,7 @@ Ctrl+Shift+P → "Model Router: Switch Mode"
 ## 💰 Budget-Management
 
 ### Konfiguration
+
 ```yaml
 budget:
   dailyUSD: 5.0        # Tagesdeckel
@@ -304,13 +403,15 @@ budget:
 ```
 
 ### Kosten-Tracking
+
 - Automatische Kostenerfassung nach jeder API-Anfrage
 - Aufschlüsselung nach Provider und Modell
 - Export für externe Analyse
 - Budget-Warnungen und Hard-Stops
 
 ### Commands
-```
+
+```text
 Model Router: Show Costs     # Ausgaben-Übersicht
 ```
 

@@ -38,6 +38,10 @@ let extensionContext: vscode.ExtensionContext;
 // Chat-History (mit optionaler Persistenz)
 const chatHistory: { role: 'user'|'assistant'; content: string; meta?: any }[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
 let chatHistoryLoaded = false;
+// Aktueller Plan (zuletzt generiert) & laufende Ausführung
+interface StoredPlan { raw: string; steps: string[]; originalUserPrompt: string; generatedAt: number; }
+let currentPlan: StoredPlan | undefined;
+let runningPlan: { index: number; abort?: AbortController; cancelled?: boolean } | undefined;
 
 async function loadPersistedChatHistory() {
   if (chatHistoryLoaded) return;
@@ -299,12 +303,125 @@ function registerCommands(context: vscode.ExtensionContext): void {
       try {
         const routed = await state.router.route({ prompt: plannerPrompt, mode: 'auto' });
         const result = await routed.provider.chatComplete(routed.modelName, [{ role: 'user', content: plannerPrompt }], { maxTokens: 300, temperature: 0.2 });
-        getActiveChatTargets().forEach(t => t.sendInfo('Plan:\n' + result.content.trim()));
+        const planText = result.content.trim();
+        getActiveChatTargets().forEach(t => t.sendInfo('Plan:\n' + planText));
+        // Schritte parsen
+        const steps: string[] = [];
+        for (const line of planText.split(/\r?\n/)) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+            const m = trimmed.match(/^(Schritt\s*\d+\s*:?|Step\s*\d+\s*:|\d+\.|\d+\)|-)\s*(.+)$/i);
+          if (m) {
+            // letzter capture (.+) oder alles nach ':'
+            const body = m[2] || trimmed.replace(/^(Schritt\s*\d+\s*:|Step\s*\d+\s*:|\d+[.)]|-)\s*/i,'');
+            steps.push(body.trim());
+          }
+        }
+        if (steps.length) {
+          currentPlan = { raw: planText, steps, originalUserPrompt: lastUser.content, generatedAt: Date.now() };
+          getActiveChatTargets().forEach(t => t.sendInfo(`Plan erkannt (${steps.length} Schritte). Mit "Execute Plan" starten.`));
+        } else {
+          getActiveChatTargets().forEach(t => t.sendInfo('Plan konnte nicht automatisch in Schritte zerlegt werden.'));
+        }
         chatHistory.push({ role: 'assistant', content: '[Plan]\n' + result.content.trim(), meta: { kind: 'plan' } });
         persistChatHistory();
       } catch (e) {
         vscode.window.showErrorMessage('Plan Fehler: ' + (e as Error).message);
       }
+    }),
+    vscode.commands.registerCommand('modelRouter.chat.executePlan', async () => {
+      if (runningPlan) { vscode.window.showWarningMessage('Plan läuft bereits'); return; }
+      if (!currentPlan) { vscode.window.showWarningMessage('Kein Plan vorhanden. Erst "Plan / Agent" ausführen.'); return; }
+      if (!state.router) { vscode.window.showErrorMessage('Router nicht initialisiert'); return; }
+      const targets = getActiveChatTargets();
+  targets.forEach(t => t.sendInfo(`Starte Plan-Ausführung (${currentPlan?.steps.length || 0} Schritte)...`));
+      runningPlan = { index: 0 };
+      for (let i = 0; i < currentPlan.steps.length; i++) {
+        if (!runningPlan || runningPlan.cancelled) break;
+        runningPlan.index = i;
+        const step = currentPlan.steps[i];
+  targets.forEach(t => t.sendInfo(`▶ Schritt ${i + 1}/${currentPlan?.steps.length || 0}: ${step}`));
+        // Abort Controller für diesen Schritt
+        const ac = new AbortController();
+        runningPlan.abort = ac;
+        try {
+          // Routing für Schritt
+          const stepPrompt = `Ursprüngliche Anfrage:\n${currentPlan.originalUserPrompt}\n\nAktueller Plan (Kontext):\n${currentPlan.raw}\n\nFühre jetzt Schritt ${i + 1} aus: ${step}\nAntwort: Fokus auf konkrete Umsetzung.`;
+          const routed = await state.router.route({ prompt: stepPrompt, mode: state.currentMode });
+          const providerToUse = routed.provider;
+          const modelName = routed.modelName;
+          const modelPrice = routed.model.price;
+          const providerId = routed.providerId;
+          // Info
+          targets.forEach(t => t.sendInfo(`Modell für Schritt ${i + 1}: ${providerId}:${modelName}`));
+          let contentAccum = '';
+          try {
+            for await (const chunk of providerToUse.chat(modelName, [
+              { role: 'system', content: 'Du führst einen mehrstufigen Plan schrittweise aus.' },
+              { role: 'user', content: currentPlan.originalUserPrompt },
+              { role: 'assistant', content: 'Plan:\n' + currentPlan.raw },
+              { role: 'user', content: `Schritt ${i + 1}: ${step}` }
+            ], { signal: ac.signal })) {
+              if (runningPlan?.cancelled) { ac.abort(); break; }
+              if (chunk.type === 'text' && chunk.data) {
+                contentAccum += chunk.data;
+                targets.forEach(t => t.streamDelta(chunk.data));
+              } else if (chunk.type === 'done') {
+                if (chunk.data?.usage && modelPrice) {
+                  try {
+                    const actualCost = PriceCalculator.calculateActualCost(
+                      chunk.data.usage,
+                      modelPrice,
+                      modelName,
+                      providerId
+                    );
+                    await state.budgetManager.recordTransaction(
+                      providerId,
+                      modelName,
+                      actualCost.totalCost,
+                      actualCost.inputTokens,
+                      actualCost.outputTokens
+                    );
+                    targets.forEach(t => t.streamDone({ usage: chunk.data?.usage, cost: actualCost }));
+                  } catch {
+                    targets.forEach(t => t.streamDone({ usage: chunk.data?.usage }));
+                  }
+                } else {
+                  targets.forEach(t => t.streamDone());
+                }
+                break;
+              } else if (chunk.type === 'error') {
+                targets.forEach(t => t.showError(chunk.error || 'Fehler in Schritt'));
+                break;
+              }
+            }
+          } catch (err) {
+            if ((err as Error).name === 'AbortError') {
+              targets.forEach(t => t.sendInfo(`Schritt ${i + 1} abgebrochen.`));
+            } else {
+              targets.forEach(t => t.showError(`Schritt ${i + 1} Fehler: ${(err as Error).message}`));
+            }
+          }
+          chatHistory.push({ role: 'user', content: `[Plan Schritt ${i + 1}] ${step}` });
+          chatHistory.push({ role: 'assistant', content: contentAccum, meta: { providerId, modelName, planStep: i + 1 } });
+          persistChatHistory();
+        } catch (e) {
+          targets.forEach(t => t.showError(`Routing Fehler Schritt ${i + 1}: ${(e as Error).message}`));
+          break;
+        }
+      }
+      if (runningPlan && !runningPlan.cancelled) {
+        targets.forEach(t => t.sendInfo('Plan abgeschlossen.'));
+      } else if (runningPlan?.cancelled) {
+        targets.forEach(t => t.sendInfo('Plan-Ausführung gestoppt.'));
+      }
+      runningPlan = undefined;
+    }),
+    vscode.commands.registerCommand('modelRouter.chat.cancelPlanExecution', () => {
+      if (!runningPlan) { vscode.window.showInformationMessage('Kein laufender Plan'); return; }
+      runningPlan.cancelled = true;
+      runningPlan.abort?.abort();
+      getActiveChatTargets().forEach(t => t.sendInfo('Abbruch angefordert...'));
     }),
     vscode.commands.registerCommand('modelRouter.chat.quickPrompt', async () => {
       const cfg = vscode.workspace.getConfiguration('modelRouter');
@@ -1197,8 +1314,24 @@ Letzte Aktualisierung: ${new Date().toLocaleString('de-DE')}`;
 // ---- Hilfsfunktionen für Chat Attachments ----
 interface AttachmentSummary { name: string; snippet: string; }
 async function readAttachmentSummaries(paths: string[]): Promise<AttachmentSummary[]> {
-  const maxFiles = 5;
-  const maxBytesPerFile = 8 * 1024; // 8KB pro Datei (Preview)
+  const cfg = vscode.workspace.getConfiguration('modelRouter');
+  const maxFiles = Math.max(1, cfg.get<number>('chat.attachment.maxFiles', 5));
+  const maxBytesPerFile = Math.max(512, cfg.get<number>('chat.attachment.maxSnippetBytes', 8192));
+  const redactSecrets = cfg.get<boolean>('chat.attachment.redactSecrets', true);
+  const extraPatterns = cfg.get<string[]>('chat.attachment.additionalRedactPatterns', []) || [];
+  const secretPatterns: RegExp[] = [];
+  if (redactSecrets) {
+    const base = [
+      /(sk|rk|pk|ak|ey|token)[-_]?[A-Za-z0-9]{12,}/gi, // generische Keys
+      /api[_-]?key\s*[:=]\s*['\"]?[A-Za-z0-9-_]{10,}['\"]?/gi,
+      /secret[_-]?key\s*[:=]\s*['\"]?[A-Za-z0-9-_]{10,}['\"]?/gi,
+      /-----BEGIN [A-Z ]+ PRIVATE KEY-----[\s\S]+?-----END [A-Z ]+ PRIVATE KEY-----/g
+    ];
+    secretPatterns.push(...base);
+    for (const p of extraPatterns) {
+      try { secretPatterns.push(new RegExp(p, 'gi')); } catch {/* ignore invalid */}
+    }
+  }
   const results: AttachmentSummary[] = [];
   for (const p of paths.slice(0, maxFiles)) {
     try {
@@ -1210,7 +1343,12 @@ async function readAttachmentSummaries(paths: string[]): Promise<AttachmentSumma
       }
       const buf = fs.readFileSync(p);
       const slice = buf.slice(0, maxBytesPerFile).toString('utf8');
-      const cleaned = slice.replace(/\u0000/g, '').replace(/\s+$/,'');
+      let cleaned = slice.replace(/\u0000/g, '').replace(/\s+$/,'');
+      if (redactSecrets && secretPatterns.length) {
+        for (const rx of secretPatterns) {
+          cleaned = cleaned.replace(rx, '[REDACTED]');
+        }
+      }
       results.push({ name: path.basename(p), snippet: cleaned });
     } catch {
       // ignore

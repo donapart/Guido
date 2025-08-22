@@ -35,15 +35,23 @@ An intelligent VSCode extension that **automatically selects the optimal AI mode
 - Redaction filters for sensitive file paths
 - No plaintext storage of secrets
 
-### 🎨 Usability
-- Status bar integration with current mode & optional budget
-- QuickPick menus for provider/model override
-- Output channel logging
-- Command palette integration
+### 🎨 Usability & UI
+
+- Webview chat panel (floating) + dockable explorer chat view
+- Model override dropdown in chat
+- Attachment summarization (snippet + secret redaction)
+- Cost footer (actual token usage)
+- Tools menu (routing simulation, budget, resend, clear)
+- Plan / Agent (generate step plan – execution upcoming)
+- Voice state badge (idle / listening / recording / processing)
+- Status bar integration (mode + optional budget)
+- QuickPrompt compact mode
+- Full command palette integration
 
 ## 🚀 Installation
 
 ### 1. Prerequisites
+
 - VSCode 1.90.0+
 - Node.js 20+ (for development)
 - Optional: Ollama for local models
@@ -51,6 +59,7 @@ An intelligent VSCode extension that **automatically selects the optimal AI mode
 ### 2. Install Extension
 
 #### Dev Version
+
 ```bash
 git clone <repository-url>
 cd model-router
@@ -60,6 +69,7 @@ npm run compile
 ```
 
 #### From Package
+
 ```bash
 npm run package
 # VSCode: Extensions: Install from VSIX
@@ -91,9 +101,33 @@ VSCode settings:
 Via Command Palette: "Model Router: Set API Key" or environment variables (`OPENAI_API_KEY`, etc.).
 
 ## 🎮 Usage
-- Chat: "Model Router: Chat"
-- One‑off routing: "Model Router: Route Prompt Once"
-- Switch mode: status bar or command
+
+### Chat Interfaces
+
+1. Floating panel: `Model Router: Open Chat UI`
+2. Docked view (Explorer) if `modelRouter.chat.showDockView` enabled.
+
+Features:
+
+- Streaming responses with token/cost footer
+- Toolbar buttons: Tools, Mic, Speaker (placeholder), Attach, Plan, Settings
+- Model dropdown (`auto` = router decides)
+- Attachments: limited, snippet extraction + secret redaction
+- Info messages (simulation, plan, budget) rendered italic
+
+QuickPrompt (compact mode):
+
+```text
+Enable setting: "modelRouter.chat.compactMode": true
+Command: "Model Router: Quick Prompt (Kompaktmodus)"
+```
+
+### Core Commands
+
+- Chat: "Model Router: Open Chat UI"
+- Quick Prompt: "Model Router: Quick Prompt (Kompaktmodus)"
+- Tools: "Model Router: Chat Tools"
+- Plan: "Model Router: Plan / Agent aus letztem Prompt"
 - Show costs: "Model Router: Show Costs"
 
 ## 💰 Budget & Status Bar
@@ -124,7 +158,20 @@ Legend:
 ## 🔒 Privacy
 `privacy-strict` enforces local models only, blocks external calls, redacts paths, strips large files.
 
+### Attachments & Redaction Settings
+```json
+{
+  "modelRouter.chat.attachment.maxFiles": 5,
+  "modelRouter.chat.attachment.maxSnippetBytes": 8192,
+  "modelRouter.chat.attachment.redactSecrets": true,
+  "modelRouter.chat.attachment.additionalRedactPatterns": [
+    "(?i)password\\s*[:=]\\s*['\"]?[A-Za-z0-9!@#$%^&*_-]{6,}"
+  ]
+}
+```
+
 ## 🛠 Development
+
 ```bash
 npm run watch
 # F5 in VSCode to start dev host
