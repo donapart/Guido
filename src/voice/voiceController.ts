@@ -81,8 +81,8 @@ export class VoiceController {
       // 3. Initialize webview
       await this.webviewProvider.initialize();
 
-      // 4. Setup wake word detection
-      await this.setupWakeWordDetection();
+             // 4. Setup wake word detection
+       this.setupWakeWordDetection();
 
       // 5. Register command handlers
       await this.registerDefaultCommands();
