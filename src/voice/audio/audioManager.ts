@@ -30,25 +30,11 @@ export class AudioManager {
   /**
    * Initialize audio system
    */
-  async initialize(): Promise<void> {
+    async initialize(): Promise<void> {
     try {
-             // Initialize Web Audio API context
-       const AudioContextClass = (globalThis as any).AudioContext || (globalThis as any).webkitAudioContext;
-       if (AudioContextClass) {
-         this.audioContext = new AudioContextClass();
-       } else {
-         throw new Error('Web Audio API not supported');
-       }
-      
-      // Resume context if suspended (Chrome auto-suspend policy)
-      if (this.audioContext.state === 'suspended') {
-        await this.audioContext.resume();
-      }
-
-      // Load available voices
-      await this.loadVoices();
-
-      console.log('🎵 Audio Manager initialized');
+      // Note: Audio Manager runs in Node.js context, actual audio APIs are in webview
+      // This is a stub that communicates with the webview for audio operations
+      console.log('🎵 Audio Manager initialized (Node.js stub)');
     } catch (error) {
       console.error('Audio Manager initialization failed:', error);
       throw new Error('Audio system not supported');
@@ -56,71 +42,44 @@ export class AudioManager {
   }
 
   /**
-   * Text-to-Speech functionality
+   * Text-to-Speech functionality (Webview communication stub)
    */
   async speak(options: TTSOptions): Promise<void> {
     if (!this.config.audio.ttsEnabled || this.isMuted) {
       return;
     }
 
-    return new Promise((resolve, reject) => {
-      try {
-        // Cancel any ongoing speech
-        this.synthesis.cancel();
-
-        // Create utterance
-        this.currentUtterance = new SpeechSynthesisUtterance(options.text);
-        
-        // Configure utterance
-        this.configureUtterance(this.currentUtterance, options);
-
-        // Set event handlers
-        this.currentUtterance.onend = () => {
-          resolve();
-        };
-
-        this.currentUtterance.onerror = (event) => {
-          reject(new Error(`TTS Error: ${event.error}`));
-        };
-
-        this.currentUtterance.onstart = () => {
-          console.log('🗣️ TTS started:', options.text.substring(0, 50));
-        };
-
-        // Speak
-        this.synthesis.speak(this.currentUtterance);
-
-      } catch (error) {
-        reject(error);
-      }
+    // In the actual implementation, this would send a message to the webview
+    // The webview would handle the TTS using browser APIs
+    console.log('🗣️ TTS request (stub):', options.text.substring(0, 50));
+    
+    // Simulate TTS completion
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve();
+      }, options.text.length * 50); // Simulate speaking time
     });
   }
 
   /**
-   * Stop current speech
+   * Stop current speech (Stub)
    */
   stopSpeaking(): void {
-    if (this.synthesis.speaking) {
-      this.synthesis.cancel();
-    }
+    console.log('🛑 TTS stop request (stub)');
   }
 
   /**
-   * Pause current speech
+   * Pause current speech (Stub)
    */
   pauseSpeaking(): void {
-    if (this.synthesis.speaking && !this.synthesis.paused) {
-      this.synthesis.pause();
-    }
+    console.log('⏸️ TTS pause request (stub)');
   }
 
   /**
-   * Resume paused speech
+   * Resume paused speech (Stub)
    */
   resumeSpeaking(): void {
-    if (this.synthesis.paused) {
-      this.synthesis.resume();
-    }
+    console.log('▶️ TTS resume request (stub)');
   }
 
   /**
