@@ -53,6 +53,17 @@
           "type": "boolean",
           "default": false,
           "description": "Erweiterte Prompt-Klassifikation aktivieren"
+        },
+        "modelRouter.showBudgetInStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Budgetverbrauch in der Statusleiste anzeigen"
+        },
+        "modelRouter.budgetDisplayMode": {
+          "type": "string",
+          "enum": ["compact", "detailed"],
+          "default": "compact",
+          "description": "Anzeigeformat für Budget (compact: Tagesbudget, detailed: Tag & Monat)"
         }
       }
     },
@@ -174,7 +185,7 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile",
-    "test": "node ./out/test/runTest.js",
+  "test": "node --test ./out/test/**/*.js",
     "package": "vsce package",
     "lint": "eslint src --ext ts"
   },

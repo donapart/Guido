@@ -98,6 +98,7 @@ class BudgetManager {
     persistentStorage;
     storage = new Map();
     STORAGE_KEY = "modelRouter.budget";
+    transactionListeners = [];
     constructor(persistentStorage) {
         this.persistentStorage = persistentStorage;
         this.loadBudgetData();
@@ -121,6 +122,21 @@ class BudgetManager {
         usage.dailySpent += cost;
         usage.monthlySpent += cost;
         await this.saveBudgetData(usage);
+        // Notify listeners (fire and forget)
+        for (const listener of this.transactionListeners) {
+            try {
+                const r = listener();
+                if (r instanceof Promise) {
+                    r.catch(() => { });
+                }
+            }
+            catch {
+                // ignore listener errors
+            }
+        }
+    }
+    onTransaction(listener) {
+        this.transactionListeners.push(listener);
     }
     /**
      * Get current budget usage

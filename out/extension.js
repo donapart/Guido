@@ -67,7 +67,14 @@ async function activate(context) {
     // Setup status bar
     state.statusBar.command = "modelRouter.switchMode";
     state.statusBar.show();
-    updateStatusBar();
+    await updateStatusBar();
+    // Budget Listener für Live-Updates
+    state.budgetManager.onTransaction(() => {
+        // Verzögert ausführen, um Schreibvorgang abzuschließen
+        setTimeout(() => {
+            updateStatusBar();
+        }, 50);
+    });
     // Load initial configuration
     try {
         await loadConfiguration();
@@ -134,8 +141,8 @@ async function loadConfiguration() {
         state.providers.clear();
         // Initialize providers
         await initializeProviders(profile);
-        // Create router
-        state.router = new router_1.ModelRouter(profile, state.providers);
+        // Create router with budget manager
+        state.router = new router_1.ModelRouter(profile, state.providers, state.budgetManager);
         // Initialize classifier if enabled
         const classifierEnabled = vscode.workspace
             .getConfiguration("modelRouter")
@@ -153,12 +160,13 @@ async function loadConfiguration() {
         }
         // Update mode from config
         state.currentMode = profile.mode;
-        updateStatusBar();
+        await updateStatusBar();
         // Initialize voice control if enabled
         if (profile.voice?.enabled) {
             await initializeVoiceControl(profile.voice);
         }
         state.outputChannel.appendLine(`Konfiguration geladen: ${profile.providers.length} Provider, Modus: ${profile.mode}${profile.voice?.enabled ? ', Voice: aktiv' : ''}`);
+        await updateStatusBar();
     }
     catch (error) {
         if (error instanceof config_1.ConfigError) {
@@ -213,12 +221,52 @@ async function initializeProviders(profile) {
 /**
  * Update status bar display
  */
-function updateStatusBar() {
+async function updateStatusBar() {
     const mode = state.currentMode;
     const providerCount = state.providers.size;
     const icon = mode === "privacy-strict" || mode === "local-only" ? "$(shield)" : "$(rocket)";
-    state.statusBar.text = `${icon} Router: ${mode} (${providerCount})`;
-    state.statusBar.tooltip = `Model Router - Modus: ${mode}, Provider: ${providerCount}`;
+    let budgetPart = "";
+    try {
+        if (state.router) {
+            const profile = state.router.getProfile();
+            if (profile.budget) {
+                const usage = await state.budgetManager.getBudgetUsage();
+                const cfg = vscode.workspace.getConfiguration("modelRouter");
+                const show = cfg.get("showBudgetInStatusBar", true);
+                const modeDisplay = cfg.get("budgetDisplayMode", "compact");
+                if (show) {
+                    if (profile.budget.dailyUSD) {
+                        const daily = usage.dailySpent;
+                        const limit = profile.budget.dailyUSD;
+                        const pct = limit ? Math.min(100, (daily / limit) * 100) : 0;
+                        if (modeDisplay === "compact") {
+                            budgetPart = ` | $${daily.toFixed(2)}/${limit}`;
+                        }
+                        else {
+                            // detailed mode
+                            let monthly = "";
+                            if (profile.budget.monthlyUSD) {
+                                const mpct = (usage.monthlySpent / profile.budget.monthlyUSD) * 100;
+                                monthly = ` m:${usage.monthlySpent.toFixed(2)}/${profile.budget.monthlyUSD}`;
+                                budgetPart = ` | d:${daily.toFixed(2)}/${limit} (${pct.toFixed(0)}%)${monthly} (${mpct.toFixed(0)}%)`;
+                            }
+                            else {
+                                budgetPart = ` | d:${daily.toFixed(2)}/${limit} (${pct.toFixed(0)}%)`;
+                            }
+                        }
+                    }
+                    else if (usage.dailySpent > 0) {
+                        budgetPart = ` | $${usage.dailySpent.toFixed(2)}`;
+                    }
+                }
+            }
+        }
+    }
+    catch (e) {
+        // ignore budget display errors
+    }
+    state.statusBar.text = `${icon} Router: ${mode} (${providerCount})${budgetPart}`;
+    state.statusBar.tooltip = `Model Router - Modus: ${mode}, Provider: ${providerCount}${state.lastBudgetSummary ? "\n" + state.lastBudgetSummary : ""}`;
 }
 /**
  * Get configuration file path

@@ -196,6 +196,7 @@ export class PriceCalculator {
 export class BudgetManager {
   private storage: Map<string, any> = new Map();
   private readonly STORAGE_KEY = "modelRouter.budget";
+  private transactionListeners: Array<() => void | Promise<void>> = [];
 
   constructor(private persistentStorage?: any) {
     this.loadBudgetData();
@@ -229,6 +230,22 @@ export class BudgetManager {
     usage.monthlySpent += cost;
 
     await this.saveBudgetData(usage);
+
+    // Notify listeners (fire and forget)
+    for (const listener of this.transactionListeners) {
+      try {
+        const r = listener();
+        if (r instanceof Promise) {
+          r.catch(() => {});
+        }
+      } catch {
+        // ignore listener errors
+      }
+    }
+  }
+
+  onTransaction(listener: () => void | Promise<void>): void {
+    this.transactionListeners.push(listener);
   }
 
   /**

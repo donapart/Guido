@@ -79,11 +79,13 @@ export declare class BudgetManager {
     private persistentStorage?;
     private storage;
     private readonly STORAGE_KEY;
+    private transactionListeners;
     constructor(persistentStorage?: any | undefined);
     /**
      * Record a cost transaction
      */
     recordTransaction(provider: string, model: string, cost: number, inputTokens: number, outputTokens: number, operation?: CostTransaction["operation"]): Promise<void>;
+    onTransaction(listener: () => void | Promise<void>): void;
     /**
      * Get current budget usage
      */

@@ -3,6 +3,7 @@
  */
 import { ModelConfig, ProfileConfig, RoutingRule } from "./config";
 import { Provider } from "./providers/base";
+import { BudgetManager } from "./price";
 export interface RoutingContext {
     prompt: string;
     lang?: string;
@@ -31,7 +32,10 @@ export declare class ModelRouter {
     private profile;
     private providers;
     private modelConfigs;
-    constructor(profile: ProfileConfig, providers: Map<string, Provider>);
+    private budgetManager?;
+    constructor(profile: ProfileConfig, providers: Map<string, Provider>, budgetManager?: BudgetManager);
+    /** Expose read-only profile for status/budget display */
+    getProfile(): ProfileConfig;
     /**
      * Route a request to the best available model
      */

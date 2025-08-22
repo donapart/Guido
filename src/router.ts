@@ -2,8 +2,9 @@
  * Model Router Engine - Core routing logic and rule evaluation
  */
 
-import { ModelConfig, ProfileConfig, ProviderConfig, RoutingRule } from "./config";
+import { ModelConfig, ProfileConfig, ProviderConfig, RoutingRule, BudgetConfig } from "./config";
 import { Provider } from "./providers/base";
+import { BudgetManager } from "./price";
 
 export interface RoutingContext {
   prompt: string;
@@ -36,11 +37,13 @@ export class ModelRouter {
   private profile: ProfileConfig;
   private providers: Map<string, Provider>;
   private modelConfigs: Map<string, ModelConfig>;
+  private budgetManager?: BudgetManager;
 
-  constructor(profile: ProfileConfig, providers: Map<string, Provider>) {
+  constructor(profile: ProfileConfig, providers: Map<string, Provider>, budgetManager?: BudgetManager) {
     this.profile = profile;
     this.providers = providers;
     this.modelConfigs = new Map();
+    this.budgetManager = budgetManager;
 
     // Build model lookup
     for (const providerConfig of profile.providers) {
@@ -49,6 +52,11 @@ export class ModelRouter {
         this.modelConfigs.set(key, model);
       }
     }
+  }
+
+  /** Expose read-only profile for status/budget display */
+  getProfile(): ProfileConfig {
+    return this.profile;
   }
 
   /**
@@ -276,10 +284,29 @@ export class ModelRouter {
     }
 
     // Check budget constraints
-    if (options.budgetCheck && model.price) {
+    if (options.budgetCheck && model.price && this.profile.budget) {
       const estimatedCost = this.estimateCost(context.prompt, model);
-      // TODO: Implement actual budget checking
       reasoning.push(`Estimated cost: $${estimatedCost.toFixed(4)}`);
+
+      if (this.budgetManager) {
+        try {
+          const budgetCheck = await this.budgetManager.checkBudget(estimatedCost, this.profile.budget as BudgetConfig);
+          if (!budgetCheck.allowed) {
+            reasoning.push(`Budget block: ${budgetCheck.reason}`);
+            // Hard stop? then disqualify this candidate
+            if (this.profile.budget?.hardStop) {
+              return null;
+            }
+          } else if (this.profile.budget.warningThreshold) {
+            const warnings = await this.budgetManager.getBudgetWarnings(this.profile.budget);
+            if (warnings.length) {
+              reasoning.push(...warnings.map(w => `Warn: ${w}`));
+            }
+          }
+        } catch (e) {
+          reasoning.push(`Budget check failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
     }
 
     // Check privacy constraints
