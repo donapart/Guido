@@ -5,7 +5,7 @@
   "publisher": "model-router",
   "version": "0.1.0",
   "engines": {
-    "vscode": "^1.103.0"
+    "vscode": "^1.99.0"
   },
   "categories": [
     "Other",
@@ -60,7 +60,10 @@
         },
         "modelRouter.budgetDisplayMode": {
           "type": "string",
-          "enum": ["compact", "detailed"],
+          "enum": [
+            "compact",
+            "detailed"
+          ],
           "default": "compact",
           "description": "Anzeigeformat für Budget (compact: Tagesbudget, detailed: Tag & Monat)"
         },
@@ -96,7 +99,9 @@
         },
         "modelRouter.chat.attachment.additionalRedactPatterns": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "default": [],
           "description": "Zusätzliche Regex-Pattern für Geheimnis-Redaktion"
         }
@@ -302,15 +307,15 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile",
-  "test": "node --test ./out/test/**/*.js",
+    "test": "node --test ./out/test/**/*.js",
     "package": "vsce package",
-  "lint": "eslint src --ext ts",
-  "docs:toc": "node scripts/generateToc.mjs"
+    "lint": "eslint src --ext ts",
+    "docs:toc": "node scripts/generateToc.mjs"
   },
   "devDependencies": {
     "@types/dom-speech-recognition": "^0.0.6",
     "@types/node": "^20.12.12",
-    "@types/vscode": "^1.103.0",
+    "@types/vscode": "^1.99.0",
     "@typescript-eslint/eslint-plugin": "^7.8.0",
     "@typescript-eslint/parser": "^7.8.0",
     "eslint": "^8.57.0",
