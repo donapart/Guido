@@ -74,8 +74,8 @@ async function activate(context) {
     }
     catch (error) {
         vscode.window.showErrorMessage(`Fehler beim Laden der Konfiguration: ${error instanceof Error ? error.message : String(error)}`);
-        // Create default config if none exists
-        await createDefaultConfigIfNeeded();
+        // Optional: Standard-Konfig anlegen anbieten
+        // await createDefaultConfigIfNeeded();
     }
     // Register commands
     registerCommands(context);
@@ -307,13 +307,14 @@ async function handleChatCommand() {
         state.outputChannel.appendLine(`🧠 Begründung: ${result.reasoning.join(", ")}`);
         state.outputChannel.appendLine("─".repeat(50));
         state.outputChannel.show(true);
-        // Execute chat
-        let responseText = "";
+        // Execute chat (stream to OutputChannel)
+        // Hinweis: Vollständige Antwort könnte später für Folgefunktionen genutzt werden
+        let _responseText = ""; // um Lint zu vermeiden, vorerst ungenutzt
         for await (const chunk of result.provider.chat(result.modelName, [
             { role: "user", content: prompt }
         ])) {
             if (chunk.type === "text" && chunk.data) {
-                responseText += chunk.data;
+                _responseText += chunk.data;
                 state.outputChannel.append(chunk.data);
             }
             else if (chunk.type === "done") {

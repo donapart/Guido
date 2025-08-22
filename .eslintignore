@@ -1,0 +1,7 @@
+out/
+node_modules/
+**/*.d.ts
+*.js
+*.vsix
+.vscode/
+.git/
