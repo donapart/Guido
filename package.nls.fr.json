@@ -1,0 +1,50 @@
+{
+  "displayName": "Model Router (VSCode/Cursor)",
+  "description": "Sélection automatique de modèles IA avec moteur de routage, gestion des coûts et contrôle vocal Guido",
+  
+  "command.chat.title": "Model Router: Chat",
+  "command.routeOnce.title": "Model Router: Router la demande une fois", 
+  "command.setApiKey.title": "Model Router: Définir la clé API (Fournisseur)",
+  "command.switchMode.title": "Model Router: Changer de mode",
+  "command.openConfig.title": "Model Router: Ouvrir la configuration",
+  "command.showCosts.title": "Model Router: Afficher les coûts",
+  "command.testConnection.title": "Model Router: Tester la connexion du fournisseur",
+  "command.startVoiceControl.title": "Model Router: Démarrer le contrôle vocal (Guido)",
+  "command.stopVoiceControl.title": "Model Router: Arrêter le contrôle vocal",
+  "command.toggleVoiceControl.title": "Model Router: Basculer le contrôle vocal",
+  "command.voiceSettings.title": "Model Router: Paramètres vocaux",
+  "command.voicePermissions.title": "Model Router: Autorisations vocales et confidentialité",
+  
+  "config.configPath.description": "Chemin vers la configuration du routeur (YAML).",
+  "config.mode.description": "Mode de routage actif",
+  "config.enablePromptClassifier.description": "Activer la classification avancée des invites",
+  
+  "view.guidoVoiceControl.name": "🎤 Contrôle vocal Guido",
+  
+  "notification.voiceControlReady": "🎤 Le contrôle vocal Guido est prêt!",
+  "notification.voiceControlStarted": "🎤 Contrôle vocal Guido démarré! Dites 'Guido' pour commencer.",
+  "notification.voiceControlStopped": "🛑 Contrôle vocal arrêté",
+  "notification.microphonePermissionRequired": "🎤 Autorisation du microphone requise",
+  "notification.apiKeySaved": "✅ Clé API sauvegardée pour {0}",
+  "notification.configurationLoaded": "Configuration chargée: {0} fournisseurs, mode: {1}",
+  
+  "error.configurationNotFound": "Fichier de configuration introuvable: {0}",
+  "error.providerNotFound": "Fournisseur {0} introuvable",
+  "error.routerNotInitialized": "Routeur non initialisé",
+  "error.voiceControlNotInitialized": "Le contrôle vocal n'est pas initialisé",
+  "error.microphonePermissionDenied": "L'autorisation du microphone a été refusée",
+  
+  "voice.wakeWordDetected": "Mot de réveil détecté!",
+  "voice.recordingStarted": "🔴 Enregistrement - dites 'stop' pour terminer",
+  "voice.processingInput": "🧠 Traitement de l'entrée...",
+  "voice.confirmationRequired": "🤔 Confirmation requise",
+  "voice.actionCancelled": "❌ Action annulée",
+  "voice.recordingTimeout": "⏰ Délai d'enregistrement atteint",
+  "voice.confirmationTimeout": "⏰ Délai de confirmation atteint",
+  
+  "privacy.gdprConsent": "🔒 Consentement de confidentialité pour le contrôle vocal Guido",
+  "privacy.dataProcessingAgreement": "Cette extension traite les données vocales pour la fonctionnalité. Sous RGPD, nous demandons votre consentement.",
+  "privacy.consentGiven": "✅ Consentement donné. Vous pouvez révoquer cette décision à tout moment dans les paramètres.",
+  "privacy.consentRequired": "❌ Le contrôle vocal ne peut pas être utilisé sans consentement. Les fonctions ont été désactivées.",
+  "privacy.allDataDeleted": "✅ Toutes les données stockées supprimées"
+}
