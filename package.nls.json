@@ -1,0 +1,50 @@
+{
+  "displayName": "Model Router (VSCode/Cursor)",
+  "description": "Automatische KI-Modell-Auswahl mit Routing-Engine, Kostenmanagement und Voice Control",
+  
+  "command.chat.title": "Model Router: Chat",
+  "command.routeOnce.title": "Model Router: Route Prompt Once", 
+  "command.setApiKey.title": "Model Router: Set API Key (Provider)",
+  "command.switchMode.title": "Model Router: Switch Mode",
+  "command.openConfig.title": "Model Router: Open Config",
+  "command.showCosts.title": "Model Router: Show Costs",
+  "command.testConnection.title": "Model Router: Test Provider Connection",
+  "command.startVoiceControl.title": "Model Router: Start Voice Control (Guido)",
+  "command.stopVoiceControl.title": "Model Router: Stop Voice Control",
+  "command.toggleVoiceControl.title": "Model Router: Toggle Voice Control",
+  "command.voiceSettings.title": "Model Router: Voice Settings",
+  "command.voicePermissions.title": "Model Router: Voice Permissions & Privacy",
+  
+  "config.configPath.description": "Pfad zur Router-Konfiguration (YAML).",
+  "config.mode.description": "Aktiver Routing-Modus",
+  "config.enablePromptClassifier.description": "Erweiterte Prompt-Klassifikation aktivieren",
+  
+  "view.guidoVoiceControl.name": "🎤 Guido Voice Control",
+  
+  "notification.voiceControlReady": "🎤 Guido Voice Control ist bereit!",
+  "notification.voiceControlStarted": "🎤 Guido Voice Control gestartet! Sagen Sie 'Guido' um zu beginnen.",
+  "notification.voiceControlStopped": "🛑 Voice Control gestoppt",
+  "notification.microphonePermissionRequired": "🎤 Mikrofon-Berechtigung erforderlich",
+  "notification.apiKeySaved": "✅ API Key für {0} gespeichert",
+  "notification.configurationLoaded": "Konfiguration geladen: {0} Provider, Modus: {1}",
+  
+  "error.configurationNotFound": "Konfigurationsdatei nicht gefunden: {0}",
+  "error.providerNotFound": "Provider {0} nicht gefunden",
+  "error.routerNotInitialized": "Router nicht initialisiert",
+  "error.voiceControlNotInitialized": "Voice Control ist nicht initialisiert",
+  "error.microphonePermissionDenied": "Mikrofon-Berechtigung wurde verweigert",
+  
+  "voice.wakeWordDetected": "Wake Word erkannt!",
+  "voice.recordingStarted": "🔴 Aufnahme läuft - sagen Sie 'stop' zum Beenden",
+  "voice.processingInput": "🧠 Verarbeite Eingabe...",
+  "voice.confirmationRequired": "🤔 Bestätigung erforderlich",
+  "voice.actionCancelled": "❌ Aktion abgebrochen",
+  "voice.recordingTimeout": "⏰ Aufnahme-Timeout erreicht",
+  "voice.confirmationTimeout": "⏰ Bestätigung-Timeout erreicht",
+  
+  "privacy.gdprConsent": "🔒 Datenschutz-Einverständnis für Guido Voice Control",
+  "privacy.dataProcessingAgreement": "Diese Extension verarbeitet Sprachdaten für die Funktionalität. Gemäß DSGVO bitten wir um Ihr Einverständnis.",
+  "privacy.consentGiven": "✅ Einverständnis erteilt. Sie können diese Entscheidung jederzeit in den Einstellungen widerrufen.",
+  "privacy.consentRequired": "❌ Voice Control kann ohne Einverständnis nicht verwendet werden. Funktionen wurden deaktiviert.",
+  "privacy.allDataDeleted": "✅ Alle gespeicherten Daten gelöscht"
+}
