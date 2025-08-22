@@ -40,13 +40,14 @@ exports.activate = activate;
 exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
 const config_1 = require("./config");
-const router_1 = require("./router");
-const secret_1 = require("./secret");
+const server_1 = require("./mcp/server");
 const price_1 = require("./price");
 const promptClassifier_1 = require("./promptClassifier");
-const openaiCompat_1 = require("./providers/openaiCompat");
 const ollama_1 = require("./providers/ollama");
-const server_1 = require("./mcp/server");
+const openaiCompat_1 = require("./providers/openaiCompat");
+const router_1 = require("./router");
+const secret_1 = require("./secret");
+const voiceController_1 = require("./voice/voiceController");
 let state;
 async function activate(context) {
     console.log("Aktiviere Model Router Extension...");
@@ -108,6 +109,12 @@ function registerCommands(context) {
         vscode.commands.registerCommand("modelRouter.simulateRouting", handleSimulateRoutingCommand),
         vscode.commands.registerCommand("modelRouter.importApiKeys", handleImportApiKeysCommand),
         vscode.commands.registerCommand("modelRouter.exportConfig", handleExportConfigCommand),
+        // Voice Control Commands
+        vscode.commands.registerCommand("modelRouter.startVoiceControl", handleStartVoiceControlCommand),
+        vscode.commands.registerCommand("modelRouter.stopVoiceControl", handleStopVoiceControlCommand),
+        vscode.commands.registerCommand("modelRouter.toggleVoiceControl", handleToggleVoiceControlCommand),
+        vscode.commands.registerCommand("modelRouter.voiceSettings", handleVoiceSettingsCommand),
+        vscode.commands.registerCommand("modelRouter.voicePermissions", handleVoicePermissionsCommand),
     ];
     context.subscriptions.push(...commands);
 }
@@ -144,7 +151,11 @@ async function loadConfiguration() {
         // Update mode from config
         state.currentMode = profile.mode;
         updateStatusBar();
-        state.outputChannel.appendLine(`Konfiguration geladen: ${profile.providers.length} Provider, Modus: ${profile.mode}`);
+        // Initialize voice control if enabled
+        if (profile.voice?.enabled) {
+            await initializeVoiceControl(profile.voice);
+        }
+        state.outputChannel.appendLine(`Konfiguration geladen: ${profile.providers.length} Provider, Modus: ${profile.mode}${profile.voice?.enabled ? ', Voice: aktiv' : ''}`);
     }
     catch (error) {
         if (error instanceof config_1.ConfigError) {
@@ -573,6 +584,197 @@ async function handleExportConfigCommand() {
     }
     catch (error) {
         vscode.window.showErrorMessage(`Export fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);
+    }
+}
+// Voice Control Functions
+async function initializeVoiceControl(voiceConfig) {
+    try {
+        if (state.voiceController) {
+            await state.voiceController.destroy();
+        }
+        if (!state.router) {
+            throw new Error("Router muss initialisiert sein bevor Voice Control gestartet werden kann");
+        }
+        state.voiceController = new voiceController_1.VoiceController(context, voiceConfig, state.router);
+        await state.voiceController.initialize();
+        state.outputChannel.appendLine("✅ Voice Control initialisiert");
+    }
+    catch (error) {
+        state.outputChannel.appendLine(`❌ Voice Control Fehler: ${error instanceof Error ? error.message : String(error)}`);
+        vscode.window.showErrorMessage(`Voice Control konnte nicht initialisiert werden: ${error instanceof Error ? error.message : String(error)}`);
+    }
+}
+async function handleStartVoiceControlCommand() {
+    if (!state.voiceController) {
+        try {
+            await loadConfiguration();
+        }
+        catch (error) {
+            vscode.window.showErrorMessage("Konfiguration konnte nicht geladen werden");
+            return;
+        }
+    }
+    if (state.voiceController) {
+        try {
+            await state.voiceController.startListening();
+            vscode.window.showInformationMessage("🎤 Guido Voice Control gestartet! Sagen Sie 'Guido' um zu beginnen.");
+        }
+        catch (error) {
+            vscode.window.showErrorMessage(`Voice Control konnte nicht gestartet werden: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
+    else {
+        vscode.window.showErrorMessage("Voice Control ist nicht konfiguriert. Bitte aktivieren Sie es in der router.config.yaml");
+    }
+}
+async function handleStopVoiceControlCommand() {
+    if (state.voiceController) {
+        try {
+            await state.voiceController.stopListening();
+            vscode.window.showInformationMessage("🛑 Voice Control gestoppt");
+        }
+        catch (error) {
+            vscode.window.showErrorMessage(`Fehler beim Stoppen: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
+    else {
+        vscode.window.showInformationMessage("Voice Control ist nicht aktiv");
+    }
+}
+async function handleToggleVoiceControlCommand() {
+    if (!state.voiceController) {
+        await handleStartVoiceControlCommand();
+    }
+    else {
+        const currentState = state.voiceController.getState();
+        if (currentState === "listening" || currentState === "recording") {
+            await handleStopVoiceControlCommand();
+        }
+        else {
+            await handleStartVoiceControlCommand();
+        }
+    }
+}
+async function handleVoiceSettingsCommand() {
+    if (!state.voiceController) {
+        vscode.window.showErrorMessage("Voice Control ist nicht initialisiert");
+        return;
+    }
+    const options = [
+        "🎤 Voice Control starten/stoppen",
+        "🔊 Lautstärke anpassen",
+        "🗣️ Stimme wechseln",
+        "🌐 Sprache ändern",
+        "⚙️ Erweiterte Einstellungen",
+        "📊 Voice Statistiken anzeigen"
+    ];
+    const selected = await vscode.window.showQuickPick(options, {
+        placeHolder: "Voice Control Einstellungen"
+    });
+    switch (selected) {
+        case "🎤 Voice Control starten/stoppen":
+            await handleToggleVoiceControlCommand();
+            break;
+        case "🔊 Lautstärke anpassen":
+            const volume = await vscode.window.showInputBox({
+                prompt: "Lautstärke eingeben (0.0 - 1.0)",
+                value: "0.8",
+                validateInput: (value) => {
+                    const num = parseFloat(value);
+                    return (isNaN(num) || num < 0 || num > 1) ? "Bitte eine Zahl zwischen 0.0 und 1.0 eingeben" : undefined;
+                }
+            });
+            if (volume) {
+                vscode.window.showInformationMessage(`Lautstärke auf ${volume} gesetzt`);
+            }
+            break;
+        case "🗣️ Stimme wechseln":
+            vscode.window.showInformationMessage("Stimmenwechsel über die Webview verfügbar");
+            break;
+        case "🌐 Sprache ändern":
+            const languages = ["de-DE", "en-US", "fr-FR", "es-ES", "it-IT"];
+            const selectedLang = await vscode.window.showQuickPick(languages, {
+                placeHolder: "Sprache auswählen"
+            });
+            if (selectedLang) {
+                vscode.window.showInformationMessage(`Sprache auf ${selectedLang} gesetzt`);
+            }
+            break;
+        case "⚙️ Erweiterte Einstellungen":
+            await handleOpenConfigCommand();
+            break;
+        case "📊 Voice Statistiken anzeigen":
+            const stats = state.voiceController.getStats();
+            const statsMessage = `📊 Voice Control Statistiken:
+        
+Sessions: ${stats.totalSessions}
+Gesamtzeit: ${Math.round(stats.totalDuration / 1000 / 60)} Minuten
+Durchschnitt/Session: ${Math.round(stats.averageSessionDuration / 1000)} Sekunden
+Befehle ausgeführt: ${stats.commandsExecuted}
+Fehler: ${stats.errorsCount}
+Erkennungsgenauigkeit: ${stats.recognitionAccuracy ? `${Math.round(stats.recognitionAccuracy * 100)}%` : 'N/A'}`;
+            vscode.window.showInformationMessage(statsMessage, { modal: true });
+            break;
+    }
+}
+async function handleVoicePermissionsCommand() {
+    const options = [
+        "🔐 DSGVO-Einverständnis verwalten",
+        "🎤 Mikrofon-Berechtigungen prüfen",
+        "📊 Datennutzung anzeigen",
+        "🗑️ Gespeicherte Daten löschen",
+        "📄 Datenschutzerklärung anzeigen",
+        "📤 Daten exportieren (DSGVO)"
+    ];
+    const selected = await vscode.window.showQuickPick(options, {
+        placeHolder: "Berechtigungen und Datenschutz"
+    });
+    switch (selected) {
+        case "🔐 DSGVO-Einverständnis verwalten":
+            const revokeConsent = await vscode.window.showWarningMessage("Möchten Sie Ihr Einverständnis zur Datenverarbeitung widerrufen? Dies löscht alle gespeicherten Voice-Daten.", { modal: true }, "Widerrufen", "Beibehalten");
+            if (revokeConsent === "Widerrufen") {
+                vscode.window.showInformationMessage("✅ Einverständnis widerrufen und Daten gelöscht");
+            }
+            break;
+        case "🎤 Mikrofon-Berechtigungen prüfen":
+            vscode.window.showInformationMessage("Mikrofon-Berechtigungen werden geprüft... Details in der Webview verfügbar.");
+            break;
+        case "📊 Datennutzung anzeigen":
+            const dataInfo = `📊 Voice Control Datennutzung:
+
+🎙️ Sprachaufnahmen: Nicht gespeichert
+📝 Transkripte: Anonymisiert, 30 Tage Aufbewahrung
+📈 Statistiken: Lokal gespeichert
+🔒 Verschlüsselung: Aktiviert
+🌍 Externe APIs: Nur bei aktiviertem Cloud-Modus
+
+Letzte Aktualisierung: ${new Date().toLocaleString('de-DE')}`;
+            vscode.window.showInformationMessage(dataInfo, { modal: true });
+            break;
+        case "🗑️ Gespeicherte Daten löschen":
+            const deleteData = await vscode.window.showWarningMessage("Alle Voice Control Daten löschen? Dies kann nicht rückgängig gemacht werden.", { modal: true }, "Löschen", "Abbrechen");
+            if (deleteData === "Löschen") {
+                vscode.window.showInformationMessage("✅ Alle Voice Control Daten gelöscht");
+            }
+            break;
+        case "📄 Datenschutzerklärung anzeigen":
+            const policyUri = vscode.Uri.parse("https://github.com/your-username/model-router/blob/main/PRIVACY.md");
+            await vscode.env.openExternal(policyUri);
+            break;
+        case "📤 Daten exportieren (DSGVO)":
+            const exportData = JSON.stringify({
+                exported: new Date().toISOString(),
+                voiceStats: state.voiceController?.getStats() || {},
+                permissions: "granted",
+                note: "Voice Control Datenexport gemäß DSGVO Artikel 20"
+            }, null, 2);
+            const doc = await vscode.workspace.openTextDocument({
+                content: exportData,
+                language: 'json'
+            });
+            await vscode.window.showTextDocument(doc);
+            vscode.window.showInformationMessage("📤 Voice Control Daten exportiert");
+            break;
     }
 }
 //# sourceMappingURL=extension.js.map

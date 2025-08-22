@@ -1,7 +1,7 @@
 /**
  * Price calculation and budget management for Model Router
  */
-import { ModelPrice, ModelConfig } from "./config";
+import { ModelConfig, ModelPrice } from "./config";
 import { TokenUsage } from "./providers/base";
 export interface CostEstimate {
     inputCost: number;

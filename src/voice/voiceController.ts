@@ -4,16 +4,22 @@
  */
 
 import * as vscode from "vscode";
-import { 
-  VoiceConfig, VoiceState, VoiceEvent, VoiceTranscript, VoiceResponse,
-  VoiceSession, VoiceStats, VoiceRoutingContext, PermissionStatus,
-  VoiceCommandHandler, SupportedLanguage
-} from "./types";
-import { VoiceWebviewProvider } from "./webview/voiceWebviewProvider";
+import { ModelRouter } from "../router";
+import { AudioManager } from "./audio/audioManager";
 import { VoiceCommandProcessor } from "./commands/voiceCommandProcessor";
 import { VoicePermissionManager } from "./permissions/voicePermissionManager";
-import { AudioManager } from "./audio/audioManager";
-import { ModelRouter } from "../router";
+import {
+  VoiceCommandHandler,
+  VoiceConfig,
+  VoiceEvent,
+  VoiceResponse,
+  VoiceRoutingContext,
+  VoiceSession,
+  VoiceState,
+  VoiceStats,
+  VoiceTranscript,
+} from "./types";
+import { VoiceWebviewProvider } from "./webview/voiceWebviewProvider";
 
 export class VoiceController {
   private state: VoiceState = "idle";

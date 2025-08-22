@@ -1,7 +1,7 @@
 /**
  * Model Router Engine - Core routing logic and rule evaluation
  */
-import { RoutingRule, ProfileConfig, ModelConfig } from "./config";
+import { ModelConfig, ProfileConfig, RoutingRule } from "./config";
 import { Provider } from "./providers/base";
 export interface RoutingContext {
     prompt: string;

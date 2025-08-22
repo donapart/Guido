@@ -1,109 +1,108 @@
+"use strict";
 /**
  * Voice Webview Provider - Manages the Speech API interface and UI
  * Handles wake word detection, recording, and visual feedback
  */
-
-import * as vscode from "vscode";
-import { VoiceConfig } from "../types";
-
-export class VoiceWebviewProvider implements vscode.WebviewViewProvider {
-  public static readonly viewType = 'guidoVoiceControl';
-
-  private _view?: vscode.WebviewView;
-  private _context: vscode.ExtensionContext;
-  private _config: VoiceConfig;
-  private _messageHandlers: ((message: any) => void)[] = [];
-  private _isInitialized = false;
-
-  constructor(
-    context: vscode.ExtensionContext,
-    config: VoiceConfig
-  ) {
-    this._context = context;
-    this._config = config;
-  }
-
-  public async initialize(): Promise<void> {
-    if (this._isInitialized) {
-      return;
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
     }
-
-    // Register webview provider
-    this._context.subscriptions.push(
-      vscode.window.registerWebviewViewProvider(
-        VoiceWebviewProvider.viewType,
-        this,
-        { webviewOptions: { retainContextWhenHidden: true } }
-      )
-    );
-
-    this._isInitialized = true;
-  }
-
-  public resolveWebviewView(
-    webviewView: vscode.WebviewView,
-    context: vscode.WebviewViewResolveContext,
-    _token: vscode.CancellationToken,
-  ) {
-    this._view = webviewView;
-
-    webviewView.webview.options = {
-      enableScripts: true,
-      localResourceRoots: [
-        this._context.extensionUri
-      ]
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
     };
-
-    webviewView.webview.html = this.getHtmlContent(webviewView.webview);
-
-    // Handle messages from webview
-    webviewView.webview.onDidReceiveMessage(
-      (message) => {
-        this._messageHandlers.forEach(handler => {
-          try {
-            handler(message);
-          } catch (error) {
-            console.error("Webview message handler error:", error);
-          }
-        });
-      }
-    );
-
-    // Send initial configuration
-    this.sendMessage({
-      command: "configure",
-      config: this._config
-    });
-  }
-
-  public async sendMessage(message: any): Promise<void> {
-    if (this._view) {
-      await this._view.webview.postMessage(message);
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.VoiceWebviewProvider = void 0;
+const vscode = __importStar(require("vscode"));
+class VoiceWebviewProvider {
+    static viewType = 'guidoVoiceControl';
+    _view;
+    _context;
+    _config;
+    _messageHandlers = [];
+    _isInitialized = false;
+    constructor(context, config) {
+        this._context = context;
+        this._config = config;
     }
-  }
-
-  public onMessage(handler: (message: any) => void): void {
-    this._messageHandlers.push(handler);
-  }
-
-  public async destroy(): Promise<void> {
-    this._messageHandlers = [];
-    this._view = undefined;
-    this._isInitialized = false;
-  }
-
-  private getHtmlContent(webview: vscode.Webview): string {
-    // Get resource paths
-    const styleUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this._context.extensionUri, 'src', 'voice', 'webview', 'style.css')
-    );
-    const scriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this._context.extensionUri, 'src', 'voice', 'webview', 'script.js')
-    );
-
-    const nonce = this.getNonce();
-
-    return `<!DOCTYPE html>
+    async initialize() {
+        if (this._isInitialized) {
+            return;
+        }
+        // Register webview provider
+        this._context.subscriptions.push(vscode.window.registerWebviewViewProvider(VoiceWebviewProvider.viewType, this, { webviewOptions: { retainContextWhenHidden: true } }));
+        this._isInitialized = true;
+    }
+    resolveWebviewView(webviewView, context, _token) {
+        this._view = webviewView;
+        webviewView.webview.options = {
+            enableScripts: true,
+            localResourceRoots: [
+                this._context.extensionUri
+            ]
+        };
+        webviewView.webview.html = this.getHtmlContent(webviewView.webview);
+        // Handle messages from webview
+        webviewView.webview.onDidReceiveMessage((message) => {
+            this._messageHandlers.forEach(handler => {
+                try {
+                    handler(message);
+                }
+                catch (error) {
+                    console.error("Webview message handler error:", error);
+                }
+            });
+        });
+        // Send initial configuration
+        this.sendMessage({
+            command: "configure",
+            config: this._config
+        });
+    }
+    async sendMessage(message) {
+        if (this._view) {
+            await this._view.webview.postMessage(message);
+        }
+    }
+    onMessage(handler) {
+        this._messageHandlers.push(handler);
+    }
+    async destroy() {
+        this._messageHandlers = [];
+        this._view = undefined;
+        this._isInitialized = false;
+    }
+    getHtmlContent(webview) {
+        // Get resource paths
+        const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this._context.extensionUri, 'src', 'voice', 'webview', 'style.css'));
+        const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this._context.extensionUri, 'src', 'voice', 'webview', 'script.js'));
+        const nonce = this.getNonce();
+        return `<!DOCTYPE html>
 <html lang="de">
 <head>
     <meta charset="UTF-8">
@@ -378,14 +377,15 @@ export class VoiceWebviewProvider implements vscode.WebviewViewProvider {
     <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
-  }
-
-  private getNonce(): string {
-    let text = '';
-    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    for (let i = 0; i < 32; i++) {
-      text += possible.charAt(Math.floor(Math.random() * possible.length));
     }
-    return text;
-  }
+    getNonce() {
+        let text = '';
+        const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        for (let i = 0; i < 32; i++) {
+            text += possible.charAt(Math.floor(Math.random() * possible.length));
+        }
+        return text;
+    }
 }
+exports.VoiceWebviewProvider = VoiceWebviewProvider;
+//# sourceMappingURL=voiceWebviewProvider.js.map
