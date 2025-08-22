@@ -97,15 +97,36 @@
         connectionStatus: document.getElementById('connectionStatus')
     };
 
+    // Check microphone permission
+    async function checkMicrophonePermission() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            if (stream) {
+                log('✅ Mikrofon-Berechtigung erteilt');
+                return true;
+            }
+        } catch (error) {
+            log('❌ Mikrofon-Berechtigung verweigert: ' + error.message);
+            vscode.postMessage({ command: 'microphonePermissionDenied', error: error.message });
+            return false;
+        }
+    }
+
     // Initialize
-    function init() {
+    async function init() {
         console.log('🎤 Guido Voice Control initializing...');
-        
+
+        const hasPermission = await checkMicrophonePermission();
+        if (!hasPermission) {
+            log('Voice Control wird deaktiviert, da keine Mikrofon-Berechtigung vorliegt.');
+            return;
+        }
+
         setupEventListeners();
         setupSpeechRecognition();
         loadAvailableVoices();
         updateConnectionStatus(true);
-        
+
         log('Voice Control initialized');
     }
 

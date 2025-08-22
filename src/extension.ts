@@ -518,7 +518,7 @@ async function loadConfiguration(): Promise<void> {
             try {
               const { ChatPanel } = require('./webview/chatPanel');
               if (ChatPanel.current) {
-                const newState = typeof ev.data === 'string' ? ev.data : ev.data?.to?.toString?.() || 'idle';
+                const newState = typeof ev.data === 'string' ? ev.data : ev.data?.toString?.() || 'idle';
                 ChatPanel.current.sendVoiceState?.(newState);
               }
             } catch { /* ignore */ }
@@ -658,7 +658,14 @@ function getConfigPath(): string {
   const configSetting = vscode.workspace.getConfiguration("modelRouter").get<string>("configPath");
   
   if (!configSetting) {
-    throw new Error("Konfigurationspfad nicht gesetzt");
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      throw new Error("Kein Workspace-Ordner geöffnet und Konfigurationspfad nicht gesetzt");
+    }
+
+    const defaultPath = vscode.Uri.joinPath(workspaceFolder.uri, "router.config.yaml").fsPath;
+    vscode.window.showWarningMessage(`Konfigurationspfad nicht gesetzt. Standardpfad wird verwendet: ${defaultPath}`);
+    return defaultPath;
   }
 
   // Replace workspace folder variable
