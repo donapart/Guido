@@ -10,93 +10,83 @@ Eine intelligente VSCode-Extension, die **automatisch das optimale KI-Modell** f
 ## 🎯 Features
 
 ### ⚡ Intelligentes Routing
-- **Automatische Modellauswahl** basierend auf Prompt-Inhalt, Dateityp und Kontext
-- **Regelbasiertes System** mit anpassbaren Routing-Regeln
-- **Optionaler LLM-Classifier** für erweiterte Prompt-Analyse
-- **Fallback-Mechanismen** bei Ausfällen oder Rate Limits
+
+- Automatische Modellauswahl (Prompt-Inhalt, Dateityp, Kontext)
+- Regelbasiertes System + optionaler LLM-Classifier
+- Fallback-Mechanismen (Ausfälle, Rate Limits)
 
 ### 🌐 Multi-Provider-Unterstützung
-- **OpenAI** (GPT-4o, GPT-4o-mini, GPT-4.1)
-- **DeepSeek** (v3, r1 Reasoning)
-- **Grok** (xAI)
-- **Microsoft Phi** (4, 4-mini)
-- **Ollama** (lokale Modelle: Llama, Qwen, CodeLlama)
-- **Beliebige OpenAI-kompatible APIs**
+
+- OpenAI (GPT‑4o, GPT‑4o-mini, GPT‑4.1)
+- DeepSeek (v3, r1 Reasoning)
+- Grok (xAI)
+- Microsoft Phi (4, 4-mini)
+- Ollama (lokal: Llama, Qwen, CodeLlama)
+- Beliebige OpenAI-kompatible APIs
 
 ### 💰 Kostenbewusstsein
-- **Live-Kostenschätzung** vor Ausführung
-- **Budget-Management** mit Tages- und Monatslimits
-- **Ausgaben-Tracking** und Statistiken
-- **Preisvergleich** zwischen Modellen
+
+- Live-Kostenschätzung vor Ausführung
+- Budget (Tag/Monat) + Hard-Stop + Warnschwelle
+- Ausgaben-Tracking & Statistiken
+- Preisvergleich je Modell
 
 ### 🔒 Sicherheit & Datenschutz
-- **Sichere API-Key-Speicherung** über VSCode SecretStorage
-- **Privacy-Modi**: `privacy-strict`, `local-only`, `offline`
-- **Datenschutz-Filter** für sensible Dateipfade
-- **Keine Klartext-Speicherung** von Geheimnissen
 
-### 🎨 Benutzerfreundlichkeit & UI
+- Sichere SecretStorage API-Key Ablage
+- Privacy-Modi: `privacy-strict`, `local-only`, `offline`
+- Redaktions-Filter & Pfad-Regeln
+- Keine Klartext-Speicherung sensibler Werte
 
-- **Webview Chat Panel** (floating) & **andockbare Chat-View** im Explorer
-- **Model Override Dropdown** direkt im Chat
-- **Anhänge-Zusammenfassung** (Snippet, Secret-Redaktion konfigurierbar)
-- **Kosten-Footer** mit tatsächlichen Tokenwerten
-- **Tools-Menü** (Routing-Simulation, Budget, Resend, Clear)
-- **Plan / Agent**: Schrittplan generieren (Ausbau geplant: Ausführung)
-- **Voice-State Indikator** (idle / listening / recording / processing)
-- **Statusbar-Integration** (Modus + optional Budget)
-- **QuickPrompt-Kompaktmodus** für schnelle Prompts ohne Panel
-- **Command Palette** Integration kompletter Funktionen
+### 🎨 UI & Bedienung
+
+- Floating Chat Panel & Dock-View (synchron)
+- Model Override Dropdown
+- Anhänge-Zusammenfassung + Secret-Redaktion
+- Kosten-Footer (tatsächliche Usage)
+- Tools-Menü (Simulation, Budget, Resend, Clear)
+- Plan / Agent: Plan erzeugen & Schritte sequenziell ausführen (Streaming & Abbruch)
+- Statusbar: Modus, Budget, Plan-Fortschritt `$(sync~spin) Plan 2/5`
+- Voice-State Indikator (idle/listening/recording/processing)
+- QuickPrompt Kompaktmodus
+- Vollständige Command-Palette Integration
 
 ## 🚀 Installation
 
 ### 1. Voraussetzungen
 
-- VSCode 1.90.0 oder neuer
-- Node.js 20+ (für Entwicklung)
+- VSCode 1.90.0+
+- Node.js 20+
 - Optional: Ollama für lokale Modelle
 
-### 2. Extension installieren
-
-#### Entwicklungsversion (empfohlen)
+### 2. Entwicklungsversion
 
 ```bash
-# Repository klonen
 git clone <repository-url>
 cd model-router
-
-# Dependencies installieren
 npm install
-
-# TypeScript kompilieren
 npm run compile
-
-# Extension in VSCode laden
-# F5 drücken oder "Run Extension" in der Debug-Ansicht
+# F5 in VSCode (Run Extension)
 ```
 
-#### Aus Package installieren
+### 3. Aus VSIX
 
 ```bash
-# Extension packen
 npm run package
-
-# In VSCode installieren: Ctrl+Shift+P -> "Extensions: Install from VSIX"
+# VSCode: Extensions: Install from VSIX
 ```
 
-### 3. Konfiguration einrichten
+### 4. Struktur
 
-Die Extension erstellt automatisch eine Standard-Konfiguration:
-```
+```text
 workspace/
-├── router.config.yaml    # Haupt-Konfiguration
-└── .vscode/
-    └── settings.json     # VSCode-Einstellungen
+├── router.config.yaml
+└── .vscode/settings.json
 ```
 
 ## ⚙️ Konfiguration
 
-### Basis-Konfiguration (router.config.yaml)
+### Beispiel `router.config.yaml`
 
 ```yaml
 version: 1
@@ -104,18 +94,238 @@ activeProfile: default
 
 profiles:
   default:
-    mode: auto  # auto|speed|quality|cheap|local-only|privacy-strict
-    
+    mode: auto
     budget:
       dailyUSD: 2.50
+      monthlyUSD: 50
       hardStop: true
       warningThreshold: 80
-    
     privacy:
       redactPaths: ["**/secrets/**", "**/.env*"]
       stripFileContentOverKB: 256
       allowExternal: true
-    
+    providers:
+      - id: openai
+        kind: openai-compat
+        baseUrl: https://api.openai.com/v1
+        apiKeyRef: OPENAI_API_KEY
+        models:
+          - name: gpt-4o-mini
+            context: 128000
+            caps: ["cheap","tools","json"]
+            price:
+              inputPerMTok: 0.15
+              outputPerMTok: 0.60
+      - id: ollama
+        kind: ollama
+        baseUrl: http://127.0.0.1:11434
+        models:
+          - name: llama3.3:70b-instruct
+            context: 32768
+            caps: ["local","long","tools"]
+    routing:
+      rules:
+        - id: cheap-tests
+          if:
+            anyKeyword: ["test","unit test","boilerplate"]
+            fileLangIn: ["ts","js","py"]
+          then:
+            prefer: ["openai:gpt-4o-mini"]
+            target: chat
+        - id: privacy
+          if:
+            privacyStrict: true
+          then:
+            prefer: ["ollama:llama3.3:70b-instruct"]
+            target: chat
+      default:
+        prefer: ["openai:gpt-4o-mini","ollama:llama3.3:70b-instruct"]
+        target: chat
+```
+
+### VSCode Settings (`settings.json`)
+
+```json
+{
+  "modelRouter.configPath": "${workspaceFolder}/router.config.yaml",
+  "modelRouter.mode": "auto",
+  "modelRouter.enablePromptClassifier": false
+}
+```
+
+## 🔑 API-Keys
+
+### Methode 1 (Command Palette)
+1. Ctrl+Shift+P → "Model Router: Set API Key"
+2. Provider-ID (z.B. `openai`)
+3. Key eingeben
+
+### Methode 2 (Environment)
+
+```bash
+export OPENAI_API_KEY="sk-..."
+export DEEPSEEK_API_KEY="sk-..."
+```
+
+Dann: Ctrl+Shift+P → "Model Router: Import API Keys"
+
+## 🎮 Nutzung
+
+### Chat Varianten
+
+Floating Panel: Command "Model Router: Open Chat UI"
+
+Docked View: aktiv bei Setting `modelRouter.chat.showDockView`.
+
+**Funktionen:** Streaming, Modell-Override, Anhänge (Snippet + Redaction), Kosten-Footer, Tools, Plan, Voice-State.
+
+### QuickPrompt
+
+```text
+Setting "modelRouter.chat.compactMode": true
+Command "Model Router: Quick Prompt (Kompaktmodus)"
+```
+
+### Plan / Agent
+
+1. "Plan / Agent aus letztem Prompt" → nummerierter Plan (≤7)
+2. "Ausgeführten Plan starten" → sequentielle Ausführung
+3. "Plan-Ausführung abbrechen" → Abort aktueller Schritt
+
+Währenddessen:
+- Jeder Schritt eigenes Routing & Streaming
+- Kosten pro Schritt erfasst (Budget aktiv)
+- Verlaufseinträge: `[Plan Schritt X]` + Antwort
+- Statusbar: `$(sync~spin) Plan X/N`
+
+Nach Abschluss / Abbruch verschwindet der Indikator.
+
+### Anhänge Einstellungen
+
+```json
+{
+  "modelRouter.chat.attachment.maxFiles": 5,
+  "modelRouter.chat.attachment.maxSnippetBytes": 8192,
+  "modelRouter.chat.attachment.redactSecrets": true,
+  "modelRouter.chat.attachment.additionalRedactPatterns": [
+    "(?i)password\\s*[:=]\\s*['\"]?[A-Za-z0-9!@#$%^&*_-]{6,}"
+  ]
+}
+```
+
+### Persistenter Verlauf
+`modelRouter.chat.persistHistory` speichert letzte 1000 Nachrichten (abschaltbar).
+
+### Relevante Commands
+
+| Command | Zweck |
+|---------|-------|
+| Open Chat UI | Chat Panel öffnen |
+| Quick Prompt (Kompaktmodus) | Schneller Prompt ohne Panel |
+| Chat Tools | Tools-Menü |
+| Plan / Agent aus letztem Prompt | Plan generieren |
+| Ausgeführten Plan starten | Plan ausführen |
+| Plan-Ausführung abbrechen | Laufende Ausführung abbrechen |
+| Show Costs | Kostenübersicht |
+| Switch Mode | Modus wechseln |
+
+## 📊 Routing-Regeln
+
+Beispiel siehe oben (Konfiguration). Bedingungen: `anyKeyword`, `fileLangIn`, `privacyStrict`, Größenbeschränkungen etc.
+
+## 💰 Budget & Statusbar
+
+Statusbar zeigt Modus + optional Budget + Plan-Fortschritt.
+
+Settings:
+```json
+{
+  "modelRouter.showBudgetInStatusBar": true,
+  "modelRouter.budgetDisplayMode": "compact"
+}
+```
+
+Plan-Beispiel:
+```text
+$(rocket) Router: auto (2) | $0.12/2.50 | $(sync~spin) Plan 2/5
+```
+
+## 🔒 Datenschutz
+
+`privacy-strict` erzwingt lokale Modelle, blockt externe Calls, redaktiert Pfade.
+
+```yaml
+privacy:
+  redactPaths:
+    - "**/secrets/**"
+    - "**/.env*"
+  stripFileContentOverKB: 256
+  allowExternal: false
+```
+
+## 🛠 Entwicklung
+
+```bash
+npm install
+npm run watch
+# F5 Development Host
+```
+
+Struktur:
+```text
+src/
+├── extension.ts
+├── config.ts
+├── router.ts
+├── secret.ts
+├── price.ts
+├── promptClassifier.ts
+├── providers/
+└── mcp/server.ts
+```
+
+## 🔧 Problembehandlung
+
+**Router nicht initialisiert**: Config prüfen, API-Key setzen, Fenster reload.
+
+**Provider nicht verfügbar**: Verbindung testen, Key prüfen, Proxy/Firewall.
+
+**Kein Modell gefunden**: Routing-Regeln / Fallbacks anpassen.
+
+**Ollama**:
+```bash
+curl -fsSL https://ollama.ai/install.sh | sh
+ollama pull llama3.3:70b-instruct
+ollama serve
+```
+
+## 📋 Roadmap
+
+### v0.2.0
+- Tool-Calling
+- MCP-Vertiefung
+- Team-Konfigurationen
+
+### v0.3.0
+- Anthropic Claude
+- Azure OpenAI
+- Benchmarks / A-B Tests
+
+### v0.4.0
+- Workflow-Automatisierung
+- Enterprise / Telemetrie Dashboard
+
+## 📄 Lizenz
+
+MIT – siehe [LICENSE](LICENSE).
+
+## 🙏 Danksagungen
+
+VSCode Team · OpenAI · DeepSeek · xAI · Ollama Community · MCP Contributors
+
+---
+
+Fragen? Issue oder Discussions öffnen.
     providers:
       # OpenAI
       - id: openai
@@ -168,10 +378,14 @@ profiles:
 ```json
 {
   "modelRouter.configPath": "${workspaceFolder}/router.config.yaml",
-  "modelRouter.mode": "auto",
+
+### Testing
+
   "modelRouter.enablePromptClassifier": false
 }
 ```
+
+### Neue Provider hinzufügen
 
 ## 🔑 API-Keys einrichten
 
@@ -245,7 +459,18 @@ Command oder Toolbar → Optionen:
 
 ### Plan / Agent
 
-Erzeugt einen nummerierten Plan (max 7 Schritte). Aktuell nur Planung; zukünftige Version führt Schritte sequenziell aus mit Zwischen-Feedback.
+1. Command: "Plan / Agent aus letztem Prompt" → erzeugt nummerierten Plan (max 7 Schritte)
+2. Command: "Ausgeführten Plan starten" → führt Schritte nacheinander aus
+
+Während der Ausführung:
+
+- Jeder Schritt wird erneut geroutet (modell-spezifisch) und gestreamt
+- Kosten/Laufzeit pro Schritt werden erfasst (Budget greift weiterhin)
+- Chat-Verlauf erhält künstliche User-Nachricht `[Plan Schritt X]` + Antwort
+- Statusbar zeigt `$(sync~spin) Plan X/N` bis Abschluss oder Abbruch
+- Abbruch: Command "Plan-Ausführung abbrechen" → aktueller Request wird via AbortController beendet
+
+Nach Abschluss: Statusbar entfernt Plan-Indikator; Chat erhält Abschluss-Info.
 
 ### Anhänge & Redaktion
 
@@ -254,13 +479,17 @@ Konfigurierbar über Einstellungen:
 ```json
 {
   "modelRouter.chat.attachment.maxFiles": 5,
-  "modelRouter.chat.attachment.maxSnippetBytes": 8192,
+
+### Logs aktivieren
+
   "modelRouter.chat.attachment.redactSecrets": true,
   "modelRouter.chat.attachment.additionalRedactPatterns": [
     "(?i)password\\s*[:=]\\s*['\"]?[A-Za-z0-9!@#$%^&*_-]{6,}"
   ]
 }
-```
+
+  ### Debug-Mode
+
 Zu große Dateien (>512KB) werden übersprungen. Nur die ersten N Bytes (Snippet) werden angezeigt. Geheimnisse durch Regex → `[REDACTED]`.
 
 ### Persistenter Verlauf
@@ -279,8 +508,8 @@ Wenn Voice aktiviert ist (Konfig), wird der Zustand live im Chat angezeigt (idle
 | Model Router: Quick Prompt (Kompaktmodus) | Schneller Prompt ohne Panel |
 | Model Router: Chat Tools | Tools-Menü |
 | Model Router: Plan / Agent aus letztem Prompt | Plan generieren |
-| Model Router: Ausgeführten Plan starten | (Platzhalter zukünftige Ausführung) |
-| Model Router: Plan-Ausführung abbrechen | Stoppt geplante Ausführung (geplant) |
+| Model Router: Ausgeführten Plan starten | Plan jetzt sequenziell ausführen (Streaming + Kosten) |
+| Model Router: Plan-Ausführung abbrechen | Laufende Plan-Ausführung stoppen |
 
 ### Relevante Einstellungen (Erweiterung)
 
@@ -419,13 +648,25 @@ Model Router: Show Costs     # Ausgaben-Übersicht
 
 Die Statusleiste zeigt – sofern aktiviert – den aktuellen Modus und optional den Budgetverbrauch an.
 
+Bei laufender Plan-Ausführung wird zusätzlich ein Spinner + Fortschritt angehängt:
+
+```text
+$(rocket) Router: auto (2) | $0.12/2.50 | $(sync~spin) Plan 2/5
+```
+
+Abbruch zeigt kurz `Plan Abbruch…`, danach verschwindet der Indikator.
+
 Einstellungen (`settings.json`):
 ```json
 {
   "modelRouter.showBudgetInStatusBar": true,
-  "modelRouter.budgetDisplayMode": "compact" // oder "detailed"
+
+### v0.2.0
+
 }
 ```
+
+### v0.3.0
 
 Modi:
 - `compact`: `Router: auto (2) | $0.12/2.50`
@@ -481,23 +722,26 @@ mode: offline  # oder local-only
 
 ## 🛠️ Entwicklung
 
-### Setup
+### Testing
+
 ```bash
-git clone <repo>
-cd model-router
-npm install
-npm run compile
+npm run watch    # Auto-compile
+F5               # Launch Extension Development Host
+
+# Provider-Verbindungen testen
+Ctrl+Shift+P → "Model Router: Test Connection"
+
+# Routing-Simulation
+Ctrl+Shift+P → "Model Router: Simulate Routing"
 ```
 
-### Struktur
-```
-src/
-├── extension.ts           # VSCode Extension Entry Point
-├── config.ts             # YAML-Konfiguration  
-├── router.ts             # Routing-Engine
-├── secret.ts             # API-Key-Management
-├── price.ts              # Kostenberechnung
-├── promptClassifier.ts   # KI-Klassifikation
+### Neue Provider hinzufügen
+
+1. Provider-Klasse in `src/providers/` erstellen
+2. `BaseProvider` erweitern
+3. In `extension.ts` registrieren
+4. Konfiguration in `router.config.yaml` ergänzen
+├── promptClassifier.ts    # KI-Klassifikation
 ├── providers/
 │   ├── base.ts          # Provider-Interface
 │   ├── openaiCompat.ts  # OpenAI-kompatibel
@@ -529,22 +773,26 @@ Ctrl+Shift+P → "Model Router: Simulate Routing"
 
 ### Häufige Probleme
 
-**"Router nicht initialisiert"**
+#### "Router nicht initialisiert"
+
 - Konfigurationsdatei prüfen: `Model Router: Open Config`
 - API-Keys setzen: `Model Router: Set API Key`
 - Extension neu laden: `Developer: Reload Window`
 
-**"Provider nicht verfügbar"**
+#### "Provider nicht verfügbar"
+
 - Verbindung testen: `Model Router: Test Connection`
 - API-Key prüfen
 - Firewall/Proxy-Einstellungen überprüfen
 
-**"Kein passendes Modell gefunden"**
+#### "Kein passendes Modell gefunden"
+
 - Routing-Regeln in Konfiguration prüfen
 - Fallback-Modelle definieren
 - Provider-Verfügbarkeit testen
 
-**Ollama-Probleme**
+#### Ollama-Probleme
+
 ```bash
 # Ollama installieren
 curl -fsSL https://ollama.ai/install.sh | sh
@@ -564,24 +812,32 @@ Output-Channel öffnen: "View" → "Output" → "Model Router"
 ```json
 {
   "modelRouter.debug": true
-}
+
+### v0.4.0
+
 ```
 
-## 🤝 Beitragen
-
-### Issues
-- Bug-Reports mit reproduzierbaren Schritten
-- Feature-Requests mit Use-Cases
-- Provider-spezifische Probleme mit Logs
-
+```text
+src/
+├── extension.ts           # VSCode Extension Entry Point
+├── config.ts              # YAML-Konfiguration  
+├── router.ts              # Routing-Engine
+├── secret.ts              # API-Key-Management
+├── price.ts               # Kostenberechnung
+├── promptClassifier.ts    # KI-Klassifikation
+├── providers/
+└── server.ts              # MCP-Integration
 ### Pull Requests
+
 1. Fork erstellen
 2. Feature-Branch: `git checkout -b feature/neue-funktion`
 3. Tests hinzufügen
 4. PR erstellen mit Beschreibung
 
 ### Provider-Requests
+
 Neue Provider können angefragt werden. Benötigt:
+
 - API-Dokumentation
 - Preismodell
 - Beispiel-API-Keys (für Tests)

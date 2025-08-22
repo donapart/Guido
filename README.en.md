@@ -43,6 +43,7 @@ An intelligent VSCode extension that **automatically selects the optimal AI mode
 - Cost footer (actual token usage)
 - Tools menu (routing simulation, budget, resend, clear)
 - Plan / Agent (generate step plan – execution upcoming)
+ - Plan / Agent (generate step plan & sequential execution with per-step streaming + abort)
 - Voice state badge (idle / listening / recording / processing)
 - Status bar integration (mode + optional budget)
 - QuickPrompt compact mode
@@ -130,6 +131,23 @@ Command: "Model Router: Quick Prompt (Kompaktmodus)"
 - Plan: "Model Router: Plan / Agent aus letztem Prompt"
 - Show costs: "Model Router: Show Costs"
 
+### Plan / Agent Execution
+
+1. Generate plan: Command "Plan / Agent aus letztem Prompt" (max 7 steps)
+2. Execute: Command "Ausgeführten Plan starten" (sequentially runs each step)
+3. Abort: Command "Plan-Ausführung abbrechen" (aborts current streaming request)
+
+During execution:
+
+- Each step is re-routed (may use different models)
+- Streaming output appended in chat
+- Cost recorded per step (budget rules still enforced)
+- Synthetic user entry `[Plan Schritt X]` + assistant answer stored in history
+- Status bar shows spinner with progress: `$(sync~spin) Plan 2/5`
+- On abort shows temporary `Plan Abbruch…` then indicator disappears
+
+After completion the spinner is removed and a completion info message is emitted.
+
 ## 💰 Budget & Status Bar
 
 Settings:
@@ -154,6 +172,12 @@ Legend:
 - `m:` monthly spend / limit (+ percentage)
 - Warnings at threshold (e.g. 80%) via notification
 - Hard stops if `hardStop: true` and limit exceeded
+
+Plan progress indicator example while running:
+
+```text
+$(rocket) Router: auto (2) | $0.12/2.50 | $(sync~spin) Plan 3/6
+```
 
 ## 🔒 Privacy
 `privacy-strict` enforces local models only, blocks external calls, redacts paths, strips large files.

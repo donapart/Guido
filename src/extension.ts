@@ -336,9 +336,11 @@ function registerCommands(context: vscode.ExtensionContext): void {
       const targets = getActiveChatTargets();
   targets.forEach(t => t.sendInfo(`Starte Plan-Ausführung (${currentPlan?.steps.length || 0} Schritte)...`));
       runningPlan = { index: 0 };
+      updateStatusBar();
       for (let i = 0; i < currentPlan.steps.length; i++) {
         if (!runningPlan || runningPlan.cancelled) break;
         runningPlan.index = i;
+        updateStatusBar();
         const step = currentPlan.steps[i];
   targets.forEach(t => t.sendInfo(`▶ Schritt ${i + 1}/${currentPlan?.steps.length || 0}: ${step}`));
         // Abort Controller für diesen Schritt
@@ -416,12 +418,14 @@ function registerCommands(context: vscode.ExtensionContext): void {
         targets.forEach(t => t.sendInfo('Plan-Ausführung gestoppt.'));
       }
       runningPlan = undefined;
+  updateStatusBar();
     }),
     vscode.commands.registerCommand('modelRouter.chat.cancelPlanExecution', () => {
       if (!runningPlan) { vscode.window.showInformationMessage('Kein laufender Plan'); return; }
       runningPlan.cancelled = true;
       runningPlan.abort?.abort();
       getActiveChatTargets().forEach(t => t.sendInfo('Abbruch angefordert...'));
+  updateStatusBar();
     }),
     vscode.commands.registerCommand('modelRouter.chat.quickPrompt', async () => {
       const cfg = vscode.workspace.getConfiguration('modelRouter');
@@ -628,8 +632,23 @@ async function updateStatusBar(): Promise<void> {
     // ignore budget display errors
   }
 
-  state.statusBar.text = `${icon} Router: ${mode} (${providerCount})${budgetPart}`;
-  state.statusBar.tooltip = `Model Router - Modus: ${mode}, Provider: ${providerCount}${state.lastBudgetSummary ? "\n" + state.lastBudgetSummary : ""}`;
+  // Plan-Fortschritt
+  let planPart = "";
+  try {
+    if (runningPlan && currentPlan) {
+      const total = currentPlan.steps.length;
+      const current = Math.min(runningPlan.index + 1, total);
+      const label = runningPlan.cancelled ? 'Abbruch…' : 'Plan';
+      // Spinner nur wenn nicht abgeschlossen/abgebrochen
+      planPart = ` | $(sync~spin) ${label} ${current}/${total}`;
+    }
+  } catch { /* ignore */ }
+
+  state.statusBar.text = `${icon} Router: ${mode} (${providerCount})${budgetPart}${planPart}`;
+  const planTooltip = (runningPlan && currentPlan)
+    ? `\nPlan Fortschritt: Schritt ${Math.min(runningPlan.index + 1, currentPlan.steps.length)}/${currentPlan.steps.length}` + (runningPlan.cancelled ? ' (Abbruch angefordert)' : '')
+    : '';
+  state.statusBar.tooltip = `Model Router - Modus: ${mode}, Provider: ${providerCount}${planTooltip}${state.lastBudgetSummary ? "\n" + state.lastBudgetSummary : ""}`;
 }
 
 /**

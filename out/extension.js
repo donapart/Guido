@@ -41,6 +41,8 @@ exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
+const chatDockView_1 = require("./webview/chatDockView");
+const chatTargets_1 = require("./webview/chatTargets");
 const config_1 = require("./config");
 const server_1 = require("./mcp/server");
 const price_1 = require("./price");
@@ -55,6 +57,8 @@ let extensionContext;
 // Chat-History (mit optionaler Persistenz)
 const chatHistory = []; // eslint-disable-line @typescript-eslint/no-explicit-any
 let chatHistoryLoaded = false;
+let currentPlan;
+let runningPlan;
 async function loadPersistedChatHistory() {
     if (chatHistoryLoaded)
         return;
@@ -118,6 +122,14 @@ async function activate(context) {
     }
     // Register commands
     registerCommands(context);
+    // Register docked chat view provider
+    try {
+        const dockProvider = new chatDockView_1.ChatDockViewProvider(extensionContext.extensionUri);
+        context.subscriptions.push(vscode.window.registerWebviewViewProvider(chatDockView_1.ChatDockViewProvider.viewType, dockProvider, { webviewOptions: { retainContextWhenHidden: true } }));
+    }
+    catch (e) {
+        state.outputChannel.appendLine('Dock View Registrierung fehlgeschlagen: ' + (e instanceof Error ? e.message : String(e)));
+    }
     // Watch for configuration changes
     const configWatcher = vscode.workspace.onDidChangeConfiguration(async (event) => {
         if (event.affectsConfiguration("modelRouter")) {
@@ -147,8 +159,8 @@ function registerCommands(context) {
                 const { ChatPanel } = require('./webview/chatPanel');
                 ChatPanel.createOrShow(extUri);
                 // Modelle & History an Webview senden
-                const panel = ChatPanel.current;
-                if (panel && state.router) {
+                const targets = (0, chatTargets_1.getActiveChatTargets)();
+                if (targets.length && state.router) {
                     try {
                         const profile = state.router.getProfile();
                         const models = [];
@@ -160,8 +172,7 @@ function registerCommands(context) {
                         }
                         if (!chatHistoryLoaded)
                             await loadPersistedChatHistory();
-                        panel.sendModels(models.sort());
-                        panel.sendHistory(chatHistory.slice(-200));
+                        targets.forEach(t => { t.sendModels(models.sort()); t.sendHistory(chatHistory.slice(-200)); });
                     }
                     catch { /* ignore */ }
                 }
@@ -175,10 +186,9 @@ function registerCommands(context) {
                 vscode.window.showErrorMessage('Router nicht initialisiert');
                 return;
             }
-            const { ChatPanel } = require('./webview/chatPanel');
-            const panel = ChatPanel.current;
-            if (!panel)
-                return;
+            const targets = (0, chatTargets_1.getActiveChatTargets)();
+            if (!targets.length)
+                return; // Keine aktive Oberfläche
             try {
                 const ctx = { prompt: text, mode: state.currentMode }; // eslint-disable-line @typescript-eslint/no-explicit-any
                 let providerToUse;
@@ -194,7 +204,7 @@ function registerCommands(context) {
                         providerToUse = state.providers.get(provCfg.id);
                         modelName = modelOverride;
                         modelPrice = provCfg.models.find(m => m.name === modelOverride)?.price;
-                        panel.sendInfo(`Override Modell: ${providerId}:${modelName}`);
+                        targets.forEach(t => t.sendInfo(`Override Modell: ${providerId}:${modelName}`));
                     }
                 }
                 if (!providerToUse) {
@@ -217,7 +227,7 @@ function registerCommands(context) {
                 if (providerToUse && modelName && modelPrice) {
                     try {
                         const est = price_1.PriceCalculator.estimateCost(fullPrompt, { price: modelPrice }, modelName); // eslint-disable-line @typescript-eslint/no-explicit-any
-                        panel.sendInfo(`Geschätzte Kosten: $${est.totalCost.toFixed(4)} (Tokens ~${est.inputTokens})`);
+                        targets.forEach(t => t.sendInfo(`Geschätzte Kosten: $${est.totalCost.toFixed(4)} (Tokens ~${est.inputTokens})`));
                     }
                     catch { /* ignore */ }
                 }
@@ -228,26 +238,26 @@ function registerCommands(context) {
                 for await (const chunk of providerToUse.chat(modelName, [{ role: 'user', content: fullPrompt }])) {
                     if (chunk.type === 'text' && chunk.data) {
                         contentAccum += chunk.data;
-                        panel.streamDelta(chunk.data);
+                        targets.forEach(t => t.streamDelta(chunk.data));
                     }
                     else if (chunk.type === 'done') {
                         if (chunk.data?.usage && modelPrice && providerId && modelName) {
                             try {
                                 const actualCost = price_1.PriceCalculator.calculateActualCost(chunk.data.usage, modelPrice, modelName, providerId);
                                 await state.budgetManager.recordTransaction(providerId, modelName, actualCost.totalCost, actualCost.inputTokens, actualCost.outputTokens);
-                                panel.streamDone({ usage: chunk.data.usage, cost: actualCost });
+                                targets.forEach(t => t.streamDone({ usage: chunk.data?.usage, cost: actualCost }));
                             }
                             catch {
-                                panel.streamDone({ usage: chunk.data.usage });
+                                targets.forEach(t => t.streamDone({ usage: chunk.data?.usage }));
                             }
                         }
                         else {
-                            panel.streamDone();
+                            targets.forEach(t => t.streamDone());
                         }
                         break;
                     }
                     else if (chunk.type === 'error') {
-                        panel.showError(chunk.error || 'Unbekannter Fehler');
+                        targets.forEach(t => t.showError(chunk.error || 'Unbekannter Fehler'));
                         break;
                     }
                 }
@@ -258,8 +268,7 @@ function registerCommands(context) {
                 persistChatHistory();
             }
             catch (err) {
-                const { ChatPanel } = require('./webview/chatPanel');
-                ChatPanel.current?.showError(err instanceof Error ? err.message : String(err));
+                (0, chatTargets_1.getActiveChatTargets)().forEach(t => t.showError(err instanceof Error ? err.message : String(err)));
             }
         }),
         vscode.commands.registerCommand('modelRouter.chat.tools', async () => {
@@ -271,8 +280,7 @@ function registerCommands(context) {
             ], { placeHolder: 'Chat Tools' });
             if (!selection)
                 return;
-            const { ChatPanel } = require('./webview/chatPanel');
-            const panel = ChatPanel.current;
+            const targets = (0, chatTargets_1.getActiveChatTargets)();
             switch (selection) {
                 case 'Routing-Simulation (letzte Nutzer-Nachricht)': {
                     const lastUser = [...chatHistory].reverse().find(m => m.role === 'user');
@@ -291,10 +299,10 @@ function registerCommands(context) {
                             textInfo += `Gewählt: ${sim.result.providerId}:${sim.result.modelName} (Score ${sim.result.score})\n`;
                         textInfo += 'Top Alternativen:\n';
                         sim.alternatives.slice(0, 5).forEach(a => { textInfo += ` - ${a.providerId}:${a.modelName} (Score ${a.score})${a.available ? '' : ' [unavailable]'}\n`; });
-                        panel?.sendInfo(textInfo);
+                        targets.forEach(t => t.sendInfo(textInfo));
                     }
                     catch (e) {
-                        panel?.sendInfo('Fehler Simulation: ' + e.message);
+                        targets.forEach(t => t.sendInfo('Fehler Simulation: ' + e.message));
                     }
                     break;
                 }
@@ -302,10 +310,10 @@ function registerCommands(context) {
                     try {
                         const stats = await state.budgetManager.getSpendingStats();
                         const usage = await state.budgetManager.getBudgetUsage();
-                        panel?.sendInfo(`Kosten: total $${stats.totalSpent.toFixed(4)} | heute $${usage.dailySpent.toFixed(4)} | Monat $${usage.monthlySpent.toFixed(4)}`);
+                        targets.forEach(t => t.sendInfo(`Kosten: total $${stats.totalSpent.toFixed(4)} | heute $${usage.dailySpent.toFixed(4)} | Monat $${usage.monthlySpent.toFixed(4)}`));
                     }
                     catch (e) {
-                        panel?.sendInfo('Fehler Kosten: ' + e.message);
+                        targets.forEach(t => t.sendInfo('Fehler Kosten: ' + e.message));
                     }
                     break;
                 }
@@ -318,7 +326,7 @@ function registerCommands(context) {
                 case 'Verlauf löschen': {
                     chatHistory.splice(0, chatHistory.length);
                     persistChatHistory();
-                    panel?.sendInfo('Verlauf gelöscht');
+                    targets.forEach(t => t.sendInfo('Verlauf gelöscht'));
                     break;
                 }
             }
@@ -337,14 +345,145 @@ function registerCommands(context) {
             try {
                 const routed = await state.router.route({ prompt: plannerPrompt, mode: 'auto' });
                 const result = await routed.provider.chatComplete(routed.modelName, [{ role: 'user', content: plannerPrompt }], { maxTokens: 300, temperature: 0.2 });
-                const { ChatPanel } = require('./webview/chatPanel');
-                ChatPanel.current?.sendInfo('Plan:\n' + result.content.trim());
+                const planText = result.content.trim();
+                (0, chatTargets_1.getActiveChatTargets)().forEach(t => t.sendInfo('Plan:\n' + planText));
+                // Schritte parsen
+                const steps = [];
+                for (const line of planText.split(/\r?\n/)) {
+                    const trimmed = line.trim();
+                    if (!trimmed)
+                        continue;
+                    const m = trimmed.match(/^(Schritt\s*\d+\s*:?|Step\s*\d+\s*:|\d+\.|\d+\)|-)\s*(.+)$/i);
+                    if (m) {
+                        // letzter capture (.+) oder alles nach ':'
+                        const body = m[2] || trimmed.replace(/^(Schritt\s*\d+\s*:|Step\s*\d+\s*:|\d+[.)]|-)\s*/i, '');
+                        steps.push(body.trim());
+                    }
+                }
+                if (steps.length) {
+                    currentPlan = { raw: planText, steps, originalUserPrompt: lastUser.content, generatedAt: Date.now() };
+                    (0, chatTargets_1.getActiveChatTargets)().forEach(t => t.sendInfo(`Plan erkannt (${steps.length} Schritte). Mit "Execute Plan" starten.`));
+                }
+                else {
+                    (0, chatTargets_1.getActiveChatTargets)().forEach(t => t.sendInfo('Plan konnte nicht automatisch in Schritte zerlegt werden.'));
+                }
                 chatHistory.push({ role: 'assistant', content: '[Plan]\n' + result.content.trim(), meta: { kind: 'plan' } });
                 persistChatHistory();
             }
             catch (e) {
                 vscode.window.showErrorMessage('Plan Fehler: ' + e.message);
             }
+        }),
+        vscode.commands.registerCommand('modelRouter.chat.executePlan', async () => {
+            if (runningPlan) {
+                vscode.window.showWarningMessage('Plan läuft bereits');
+                return;
+            }
+            if (!currentPlan) {
+                vscode.window.showWarningMessage('Kein Plan vorhanden. Erst "Plan / Agent" ausführen.');
+                return;
+            }
+            if (!state.router) {
+                vscode.window.showErrorMessage('Router nicht initialisiert');
+                return;
+            }
+            const targets = (0, chatTargets_1.getActiveChatTargets)();
+            targets.forEach(t => t.sendInfo(`Starte Plan-Ausführung (${currentPlan?.steps.length || 0} Schritte)...`));
+            runningPlan = { index: 0 };
+            updateStatusBar();
+            for (let i = 0; i < currentPlan.steps.length; i++) {
+                if (!runningPlan || runningPlan.cancelled)
+                    break;
+                runningPlan.index = i;
+                updateStatusBar();
+                const step = currentPlan.steps[i];
+                targets.forEach(t => t.sendInfo(`▶ Schritt ${i + 1}/${currentPlan?.steps.length || 0}: ${step}`));
+                // Abort Controller für diesen Schritt
+                const ac = new AbortController();
+                runningPlan.abort = ac;
+                try {
+                    // Routing für Schritt
+                    const stepPrompt = `Ursprüngliche Anfrage:\n${currentPlan.originalUserPrompt}\n\nAktueller Plan (Kontext):\n${currentPlan.raw}\n\nFühre jetzt Schritt ${i + 1} aus: ${step}\nAntwort: Fokus auf konkrete Umsetzung.`;
+                    const routed = await state.router.route({ prompt: stepPrompt, mode: state.currentMode });
+                    const providerToUse = routed.provider;
+                    const modelName = routed.modelName;
+                    const modelPrice = routed.model.price;
+                    const providerId = routed.providerId;
+                    // Info
+                    targets.forEach(t => t.sendInfo(`Modell für Schritt ${i + 1}: ${providerId}:${modelName}`));
+                    let contentAccum = '';
+                    try {
+                        for await (const chunk of providerToUse.chat(modelName, [
+                            { role: 'system', content: 'Du führst einen mehrstufigen Plan schrittweise aus.' },
+                            { role: 'user', content: currentPlan.originalUserPrompt },
+                            { role: 'assistant', content: 'Plan:\n' + currentPlan.raw },
+                            { role: 'user', content: `Schritt ${i + 1}: ${step}` }
+                        ], { signal: ac.signal })) {
+                            if (runningPlan?.cancelled) {
+                                ac.abort();
+                                break;
+                            }
+                            if (chunk.type === 'text' && chunk.data) {
+                                contentAccum += chunk.data;
+                                targets.forEach(t => t.streamDelta(chunk.data));
+                            }
+                            else if (chunk.type === 'done') {
+                                if (chunk.data?.usage && modelPrice) {
+                                    try {
+                                        const actualCost = price_1.PriceCalculator.calculateActualCost(chunk.data.usage, modelPrice, modelName, providerId);
+                                        await state.budgetManager.recordTransaction(providerId, modelName, actualCost.totalCost, actualCost.inputTokens, actualCost.outputTokens);
+                                        targets.forEach(t => t.streamDone({ usage: chunk.data?.usage, cost: actualCost }));
+                                    }
+                                    catch {
+                                        targets.forEach(t => t.streamDone({ usage: chunk.data?.usage }));
+                                    }
+                                }
+                                else {
+                                    targets.forEach(t => t.streamDone());
+                                }
+                                break;
+                            }
+                            else if (chunk.type === 'error') {
+                                targets.forEach(t => t.showError(chunk.error || 'Fehler in Schritt'));
+                                break;
+                            }
+                        }
+                    }
+                    catch (err) {
+                        if (err.name === 'AbortError') {
+                            targets.forEach(t => t.sendInfo(`Schritt ${i + 1} abgebrochen.`));
+                        }
+                        else {
+                            targets.forEach(t => t.showError(`Schritt ${i + 1} Fehler: ${err.message}`));
+                        }
+                    }
+                    chatHistory.push({ role: 'user', content: `[Plan Schritt ${i + 1}] ${step}` });
+                    chatHistory.push({ role: 'assistant', content: contentAccum, meta: { providerId, modelName, planStep: i + 1 } });
+                    persistChatHistory();
+                }
+                catch (e) {
+                    targets.forEach(t => t.showError(`Routing Fehler Schritt ${i + 1}: ${e.message}`));
+                    break;
+                }
+            }
+            if (runningPlan && !runningPlan.cancelled) {
+                targets.forEach(t => t.sendInfo('Plan abgeschlossen.'));
+            }
+            else if (runningPlan?.cancelled) {
+                targets.forEach(t => t.sendInfo('Plan-Ausführung gestoppt.'));
+            }
+            runningPlan = undefined;
+            updateStatusBar();
+        }),
+        vscode.commands.registerCommand('modelRouter.chat.cancelPlanExecution', () => {
+            if (!runningPlan) {
+                vscode.window.showInformationMessage('Kein laufender Plan');
+                return;
+            }
+            runningPlan.cancelled = true;
+            runningPlan.abort?.abort();
+            (0, chatTargets_1.getActiveChatTargets)().forEach(t => t.sendInfo('Abbruch angefordert...'));
+            updateStatusBar();
         }),
         vscode.commands.registerCommand('modelRouter.chat.quickPrompt', async () => {
             const cfg = vscode.workspace.getConfiguration('modelRouter');
@@ -360,9 +499,8 @@ function registerCommands(context) {
                 vscode.window.showErrorMessage('Router nicht initialisiert');
                 return;
             }
-            // Falls Panel geöffnet -> dort streamen, sonst nur OutputChannel
-            const { ChatPanel } = require('./webview/chatPanel');
-            if (!ChatPanel.current) {
+            // Falls keine Oberfläche -> OutputChannel
+            if (!(0, chatTargets_1.getActiveChatTargets)().length) {
                 state.outputChannel.show(true);
                 state.outputChannel.appendLine(`> ${text}`);
             }
@@ -537,8 +675,23 @@ async function updateStatusBar() {
     catch (e) {
         // ignore budget display errors
     }
-    state.statusBar.text = `${icon} Router: ${mode} (${providerCount})${budgetPart}`;
-    state.statusBar.tooltip = `Model Router - Modus: ${mode}, Provider: ${providerCount}${state.lastBudgetSummary ? "\n" + state.lastBudgetSummary : ""}`;
+    // Plan-Fortschritt
+    let planPart = "";
+    try {
+        if (runningPlan && currentPlan) {
+            const total = currentPlan.steps.length;
+            const current = Math.min(runningPlan.index + 1, total);
+            const label = runningPlan.cancelled ? 'Abbruch…' : 'Plan';
+            // Spinner nur wenn nicht abgeschlossen/abgebrochen
+            planPart = ` | $(sync~spin) ${label} ${current}/${total}`;
+        }
+    }
+    catch { /* ignore */ }
+    state.statusBar.text = `${icon} Router: ${mode} (${providerCount})${budgetPart}${planPart}`;
+    const planTooltip = (runningPlan && currentPlan)
+        ? `\nPlan Fortschritt: Schritt ${Math.min(runningPlan.index + 1, currentPlan.steps.length)}/${currentPlan.steps.length}` + (runningPlan.cancelled ? ' (Abbruch angefordert)' : '')
+        : '';
+    state.statusBar.tooltip = `Model Router - Modus: ${mode}, Provider: ${providerCount}${planTooltip}${state.lastBudgetSummary ? "\n" + state.lastBudgetSummary : ""}`;
 }
 /**
  * Get configuration file path
@@ -1102,8 +1255,27 @@ Letzte Aktualisierung: ${new Date().toLocaleString('de-DE')}`;
     }
 }
 async function readAttachmentSummaries(paths) {
-    const maxFiles = 5;
-    const maxBytesPerFile = 8 * 1024; // 8KB pro Datei (Preview)
+    const cfg = vscode.workspace.getConfiguration('modelRouter');
+    const maxFiles = Math.max(1, cfg.get('chat.attachment.maxFiles', 5));
+    const maxBytesPerFile = Math.max(512, cfg.get('chat.attachment.maxSnippetBytes', 8192));
+    const redactSecrets = cfg.get('chat.attachment.redactSecrets', true);
+    const extraPatterns = cfg.get('chat.attachment.additionalRedactPatterns', []) || [];
+    const secretPatterns = [];
+    if (redactSecrets) {
+        const base = [
+            /(sk|rk|pk|ak|ey|token)[-_]?[A-Za-z0-9]{12,}/gi, // generische Keys
+            /api[_-]?key\s*[:=]\s*['\"]?[A-Za-z0-9-_]{10,}['\"]?/gi,
+            /secret[_-]?key\s*[:=]\s*['\"]?[A-Za-z0-9-_]{10,}['\"]?/gi,
+            /-----BEGIN [A-Z ]+ PRIVATE KEY-----[\s\S]+?-----END [A-Z ]+ PRIVATE KEY-----/g
+        ];
+        secretPatterns.push(...base);
+        for (const p of extraPatterns) {
+            try {
+                secretPatterns.push(new RegExp(p, 'gi'));
+            }
+            catch { /* ignore invalid */ }
+        }
+    }
     const results = [];
     for (const p of paths.slice(0, maxFiles)) {
         try {
@@ -1116,7 +1288,12 @@ async function readAttachmentSummaries(paths) {
             }
             const buf = fs.readFileSync(p);
             const slice = buf.slice(0, maxBytesPerFile).toString('utf8');
-            const cleaned = slice.replace(/\u0000/g, '').replace(/\s+$/, '');
+            let cleaned = slice.replace(/\u0000/g, '').replace(/\s+$/, '');
+            if (redactSecrets && secretPatterns.length) {
+                for (const rx of secretPatterns) {
+                    cleaned = cleaned.replace(rx, '[REDACTED]');
+                }
+            }
             results.push({ name: path.basename(p), snippet: cleaned });
         }
         catch {
