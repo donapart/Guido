@@ -195,5 +195,6 @@
     "type": "git",
     "url": "https://github.com/your-username/model-router.git"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "l10n": "./l10n"
 }

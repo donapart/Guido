@@ -3,7 +3,7 @@
     "module": "CommonJS",
     "target": "ES2022",
     "outDir": "out",
-    "lib": ["ES2022"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable", "WebWorker"],
     "sourceMap": true,
     "rootDir": "src",
     "strict": true,
@@ -12,7 +12,8 @@
     "forceConsistentCasingInFileNames": true,
     "declaration": true,
     "declarationMap": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "types": ["node", "vscode", "dom-speech-recognition"]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "out", "**/*.test.ts"]

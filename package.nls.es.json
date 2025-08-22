@@ -1,0 +1,84 @@
+{
+  "displayName": "Model Router (VSCode/Cursor)",
+  "description": "Selección automática de modelos de IA con motor de enrutamiento, gestión de costos y control de voz Guido",
+  
+  "command.chat.title": "Model Router: Chat",
+  "command.routeOnce.title": "Model Router: Enrutar prompt una vez", 
+  "command.setApiKey.title": "Model Router: Establecer clave API (Proveedor)",
+  "command.switchMode.title": "Model Router: Cambiar modo",
+  "command.openConfig.title": "Model Router: Abrir configuración",
+  "command.showCosts.title": "Model Router: Mostrar costos",
+  "command.testConnection.title": "Model Router: Probar conexión del proveedor",
+  "command.startVoiceControl.title": "Model Router: Iniciar control de voz (Guido)",
+  "command.stopVoiceControl.title": "Model Router: Detener control de voz",
+  "command.toggleVoiceControl.title": "Model Router: Alternar control de voz",
+  "command.voiceSettings.title": "Model Router: Configuración de voz",
+  "command.voicePermissions.title": "Model Router: Permisos de voz y privacidad",
+  
+  "config.configPath.description": "Ruta a la configuración del enrutador (YAML).",
+  "config.mode.description": "Modo de enrutamiento activo",
+  "config.enablePromptClassifier.description": "Habilitar clasificación avanzada de prompts",
+  
+  "view.guidoVoiceControl.name": "🎤 Control de Voz Guido",
+  
+  "notification.voiceControlReady": "🎤 ¡El control de voz Guido está listo!",
+  "notification.voiceControlStarted": "🎤 ¡Control de voz Guido iniciado! Diga 'Guido' para comenzar.",
+  "notification.voiceControlStopped": "🛑 Control de voz detenido",
+  "notification.microphonePermissionRequired": "🎤 Permiso de micrófono requerido",
+  "notification.apiKeySaved": "✅ Clave API guardada para {0}",
+  "notification.configurationLoaded": "Configuración cargada: {0} proveedores, modo: {1}",
+  
+  "error.configurationNotFound": "Archivo de configuración no encontrado: {0}",
+  "error.providerNotFound": "Proveedor {0} no encontrado",
+  "error.routerNotInitialized": "Enrutador no inicializado",
+  "error.voiceControlNotInitialized": "El control de voz no está inicializado",
+  "error.microphonePermissionDenied": "El permiso del micrófono fue denegado",
+  
+  "voice.wakeWordDetected": "¡Palabra de activación detectada!",
+  "voice.recordingStarted": "🔴 Grabando - diga 'stop' para terminar",
+  "voice.processingInput": "🧠 Procesando entrada...",
+  "voice.confirmationRequired": "🤔 Confirmación requerida",
+  "voice.actionCancelled": "❌ Acción cancelada",
+  "voice.recordingTimeout": "⏰ Tiempo de grabación agotado",
+  "voice.confirmationTimeout": "⏰ Tiempo de confirmación agotado",
+  
+  "privacy.gdprConsent": "🔒 Consentimiento de privacidad para el control de voz Guido",
+  "privacy.dataProcessingAgreement": "Esta extensión procesa datos de voz para la funcionalidad. Bajo GDPR, solicitamos su consentimiento.",
+  "privacy.consentGiven": "✅ Consentimiento otorgado. Puede revocar esta decisión en cualquier momento en la configuración.",
+  "privacy.consentRequired": "❌ El control de voz no se puede usar sin consentimiento. Las funciones han sido deshabilitadas.",
+  "privacy.allDataDeleted": "✅ Todos los datos almacenados eliminados",
+  
+  "voice.commands.system.mute": "Micrófono silenciado",
+  "voice.commands.system.unmute": "Micrófono activado",
+  "voice.commands.system.volumeUp": "Volumen aumentado",
+  "voice.commands.system.volumeDown": "Volumen disminuido",
+  "voice.commands.system.speedUp": "Velocidad de habla aumentada",
+  "voice.commands.system.speedDown": "Velocidad de habla disminuida",
+  
+  "voice.commands.language.switchToEnglish": "Switching to English language",
+  "voice.commands.language.switchToGerman": "Wechsle zur deutschen Sprache",
+  "voice.commands.language.switchToFrench": "Je passe au français",
+  "voice.commands.language.switchToSpanish": "Cambiando al español",
+  "voice.commands.language.switchToItalian": "Passaggio all'italiano",
+  
+  "voice.commands.routing.modeSpeed": "Cambiando a modelos rápidos para mejor rendimiento",
+  "voice.commands.routing.modeQuality": "Cambiando a modelos de alta calidad para mejores resultados",
+  "voice.commands.routing.modeCheap": "Cambiando a modelos económicos",
+  "voice.commands.routing.modeLocal": "Usando solo modelos locales para máxima privacidad",
+  "voice.commands.routing.modePrivacy": "Modo de privacidad activado. Todos los datos permanecen locales",
+  
+  "voice.commands.vscode.fileOpened": "Selección de archivo abierta",
+  "voice.commands.vscode.newFileCreated": "Nuevo archivo creado",
+  "voice.commands.vscode.fileSaved": "Archivo guardado",
+  "voice.commands.vscode.codeFormatted": "Código formateado",
+  "voice.commands.vscode.searchOpened": "Búsqueda en archivos abierta",
+  "voice.commands.vscode.replaceOpened": "Buscar y reemplazar abierto",
+  "voice.commands.vscode.gitStatusShown": "Estado de Git mostrado",
+  "voice.commands.vscode.terminalOpened": "Nueva terminal abierta",
+  
+  "voice.commands.dev.selectCodeFirst": "Por favor seleccione código o abra un archivo primero",
+  
+  "voice.builtin.statusResponse": "Estoy listo y funcional. ¿Cómo puedo ayudarte?",
+  "voice.builtin.helpResponse": "Puedo ayudarte con desarrollo de código, gestión de archivos, operaciones Git y mucho más. Por ejemplo, di 'Explica este código' o 'Abrir archivo'.",
+  "voice.builtin.timeResponse": "Son las {0}."
+}
