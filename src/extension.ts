@@ -3,19 +3,17 @@
  */
 
 import * as vscode from "vscode";
-import * as path from "path";
 
-import { ConfigLoader, ProfileConfig, ConfigError } from "./config";
-import { ModelRouter } from "./router";
-import { initializeSecrets, getSecretHelper } from "./secret";
-import { PriceCalculator, BudgetManager } from "./price";
-import { PromptClassifier } from "./promptClassifier";
-import { OpenAICompatProvider } from "./providers/openaiCompat";
-import { OllamaProvider } from "./providers/ollama";
-import { Provider } from "./providers/base";
+import { ConfigError, ConfigLoader, ProfileConfig } from "./config";
 import { createModelRouterMcpServer } from "./mcp/server";
+import { BudgetManager, PriceCalculator } from "./price";
+import { PromptClassifier } from "./promptClassifier";
+import { Provider } from "./providers/base";
+import { OllamaProvider } from "./providers/ollama";
+import { OpenAICompatProvider } from "./providers/openaiCompat";
+import { ModelRouter } from "./router";
+import { getSecretHelper, initializeSecrets } from "./secret";
 import { VoiceController } from "./voice/voiceController";
-import { VoiceConfig } from "./voice/types";
 
 interface ExtensionState {
   router?: ModelRouter;
