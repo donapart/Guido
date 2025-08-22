@@ -1,0 +1,391 @@
+version: 1
+activeProfile: default
+
+profiles:
+  default:
+    mode: auto  # auto|speed|quality|cheap|local-only|offline|privacy-strict
+    budget:
+      dailyUSD: 2.50    # Tagesdeckel; 0 = aus
+      hardStop: true
+    privacy:
+      redactPaths: ["**/secrets/**", "**/.env*"]
+      stripFileContentOverKB: 256
+      allowExternal: true  # bei privacy-strict automatisch false
+
+    # 🎤 Erweiterte Sprachsteuerung Konfiguration
+    voice:
+      enabled: true
+      wakeWord: "Guido"              # Primäres Aktivierungswort
+      alternativeWakeWords: ["Hey Guido", "Computer", "Assistant"]
+      language: "de-DE"              # Spracherkennung (de-DE, en-US, fr-FR, es-ES, it-IT)
+      responseLanguage: "de"         # Antwortsprache (de, en, es, fr, it, pt, ru, zh)
+      
+      # Erweiterte Audio-Einstellungen
+      audio:
+        enableBeep: true             # Bestätigungston bei Aktivierung
+        beepType: "soft"             # soft|sharp|melody|custom
+        beepVolume: 0.3             # Lautstärke Beep (0.0-1.0)
+        customBeepPath: ""          # Pfad zu eigener Beep-Datei
+        
+        # Text-to-Speech Erweitert
+        ttsEnabled: true            # Text-to-Speech aktiviert
+        ttsEngine: "system"         # system|azure|google|amazon|elevenlabs
+        ttsVoice: "auto"            # Siehe voices-Liste unten
+        ttsSpeed: 1.0               # Sprechgeschwindigkeit (0.5-2.0)
+        ttsVolume: 0.8              # TTS-Lautstärke (0.0-1.0)
+        ttsPitch: 1.0               # Tonhöhe (0.5-2.0)
+        ttsEmphasis: "moderate"     # none|reduced|moderate|strong
+        
+        # Audio-Verbesserungen
+        noiseReduction: true        # Rauschunterdrückung
+        echoCancellation: true      # Echo-Unterdrückung
+        autoGainControl: true       # Automatische Lautstärkeregelung
+        spatialAudio: false         # 3D-Audio (experimental)
+      
+      # Verfügbare Stimmen pro Sprache
+      voices:
+        de-DE:
+          - name: "Hedda"
+            gender: "female"
+            age: "adult"
+            style: "friendly"
+            quality: "premium"
+          - name: "Stefan"
+            gender: "male" 
+            age: "adult"
+            style: "professional"
+            quality: "standard"
+          - name: "Katja"
+            gender: "female"
+            age: "young"
+            style: "energetic"
+            quality: "premium"
+        en-US:
+          - name: "Aria"
+            gender: "female"
+            age: "adult"
+            style: "conversational"
+            quality: "neural"
+          - name: "Davis"
+            gender: "male"
+            age: "adult"
+            style: "professional"
+            quality: "neural"
+      
+      # Aufnahme-Einstellungen  
+      recording:
+        timeoutSeconds: 30          # Timeout für Sprachaufnahme
+        stopWords: ["stop", "stopp", "Ende", "fertig", "schluss", "halt"]
+        minRecordingSeconds: 1      # Minimum Aufnahmezeit
+        maxRecordingSeconds: 180    # Maximum Aufnahmezeit (3 Min)
+        autoStopOnSilence: true     # Auto-Stop bei Stille
+        silenceTimeoutMs: 2000      # Stille-Timeout in Millisekunden
+        backgroundListening: true   # Kontinuierliches Zuhören
+        wakeWordSensitivity: 0.7    # Sensitivität (0.0-1.0)
+        
+        # Erweiterte Aufnahme-Features
+        smartNoiseSuppression: true # KI-basierte Rauschunterdrückung
+        speakerAdaptation: true     # Anpassung an Sprecher
+        multiSpeakerMode: false     # Mehrere Sprecher
+        recordingQuality: "high"    # low|medium|high|lossless
+        
+      # Bestätigung & Interaktion
+      confirmation:
+        required: true              # Bestätigung erforderlich
+        summaryEnabled: true        # Zusammenfassung der Eingabe
+        summaryStyle: "concise"     # concise|detailed|bullet
+        confirmWords: ["ja", "yes", "bestätigen", "ok", "korrekt", "richtig", "mach das"]
+        cancelWords: ["nein", "no", "abbrechen", "cancel", "stop", "nicht"]
+        retryWords: ["wiederholen", "nochmal", "repeat"]
+        
+        # Smart Confirmation
+        skipConfirmationFor: ["simple_questions", "weather", "time", "calculations"]
+        autoConfirmAfterSeconds: 10  # Auto-bestätigen nach X Sekunden
+        visualConfirmation: true     # Visuelle Bestätigung im UI
+        
+      # Erweiterte Sprachbefehle
+      commands:
+        # System-Befehle
+        system:
+          - trigger: ["modus wechseln", "change mode"]
+            action: "switchMode"
+            params: ["auto", "speed", "quality", "cheap", "local", "privacy"]
+          - trigger: ["kosten anzeigen", "show costs"]
+            action: "showBudget"
+          - trigger: ["provider testen", "test connection"]
+            action: "testProviders"
+          - trigger: ["konfiguration öffnen", "open config"]
+            action: "openConfig"
+            
+        # Voice-spezifische Befehle
+        voice:
+          - trigger: ["leiser", "quieter"]
+            action: "decreaseVolume"
+            step: 0.1
+          - trigger: ["lauter", "louder"]
+            action: "increaseVolume"
+            step: 0.1
+          - trigger: ["langsamer sprechen", "speak slower"]
+            action: "decreaseSpeed"
+            step: 0.1
+          - trigger: ["schneller sprechen", "speak faster"]
+            action: "increaseSpeed"
+            step: 0.1
+          - trigger: ["stimme wechseln", "change voice"]
+            action: "cycleVoice"
+          - trigger: ["sprache wechseln", "change language"]
+            action: "cycleLanguage"
+            
+        # Content-Befehle
+        content:
+          - trigger: ["code erklären", "explain code"]
+            action: "explainCode"
+            context: "selection"
+          - trigger: ["code optimieren", "optimize code"]
+            action: "optimizeCode"
+            context: "selection"
+          - trigger: ["tests schreiben", "write tests"]
+            action: "writeTests"
+            context: "file"
+          - trigger: ["dokumentation", "documentation"]
+            action: "generateDocs"
+            context: "selection"
+          - trigger: ["refactor", "restructure"]
+            action: "refactorCode"
+            context: "selection"
+            
+        # Navigation & UI
+        navigation:
+          - trigger: ["datei öffnen", "open file"]
+            action: "openFile"
+          - trigger: ["terminal öffnen", "open terminal"]
+            action: "openTerminal"
+          - trigger: ["probleme anzeigen", "show problems"]
+            action: "showProblems"
+          - trigger: ["suchen", "search"]
+            action: "globalSearch"
+      
+      # Voice-spezifische Routing-Regeln
+      routing:
+        preferFast: true            # Bei Voice bevorzuge schnelle Modelle
+        maxResponseLength: 800      # Max. Zeichen für TTS
+        skipCodeInTTS: true         # Code nicht vorlesen
+        summarizeIfLong: true       # Lange Antworten zusammenfassen
+        useSimpleLanguage: true     # Einfache Sprache verwenden
+        
+        # Kontext-spezifische Einstellungen
+        contextAware: true          # Editor-Kontext berücksichtigen
+        fileTypeOptimization: true  # Dateityp-spezifische Optimierung
+        prioritizeLocalForPrivacy: true # Bei sensiblen Daten lokal bleiben
+        
+      # Berechtigungen & Sicherheit
+      permissions:
+        allowSystemCommands: true   # System-Befehle erlauben
+        allowFileOperations: true   # Datei-Operationen erlauben
+        allowTerminalAccess: false  # Terminal-Zugriff (VORSICHT!)
+        allowNetworkRequests: true  # Netzwerk-Anfragen
+        allowExtensionControl: true # Andere Extensions steuern
+        
+        # Sicherheits-Level
+        securityLevel: "medium"     # low|medium|high|paranoid
+        requireConfirmationFor:     # Bestätigung erforderlich für:
+          - "file_deletion"
+          - "terminal_commands"  
+          - "system_settings"
+          - "network_requests"
+          - "extension_install"
+          
+        # Audit & Logging
+        auditLog: true              # Alle Befehle loggen
+        auditLogPath: "./voice-audit.log"
+        maxAuditEntries: 1000       # Max. Log-Einträge
+        
+      # Erweiterte Features
+      advanced:
+        # Persönlichkeit
+        personality: "professional" # professional|friendly|casual|technical
+        emotionalResponses: true    # Emotionale Reaktionen
+        userAdaptation: true        # Anpassung an Benutzer-Stil
+        learningMode: true          # Aus Fehlern lernen
+        
+        # Smart Features
+        contextMemory: true         # Kontext-Gedächtnis
+        conversationHistory: 10     # Letzte N Nachrichten merken
+        predictiveText: true        # Vorhersagen
+        autoCorrection: true        # Auto-Korrektur von Spracheingaben
+        
+        # Multimodal
+        gestureControl: false       # Gestensteuerung (Kamera erforderlich)
+        eyeTracking: false          # Eye-Tracking (speziell Hardware)
+        biometricAuth: false        # Biometrische Authentifizierung
+        
+        # Umgebung
+        ambientNoise: "office"      # home|office|noisy|quiet
+        adaptToTimeOfDay: true      # An Tageszeit anpassen
+        energySaving: true          # Energie-Spar-Modus
+        
+        # Integration
+        calendarIntegration: false  # Kalender-Integration
+        emailIntegration: false     # E-Mail-Integration
+        slackIntegration: false     # Slack-Integration
+        teamsIntegration: false     # Teams-Integration
+        
+      # Troubleshooting & Debug
+      debug:
+        verboseLogging: false       # Ausführliches Logging
+        showRecognitionConfidence: false # Erkennungs-Konfidenz anzeigen
+        audioVisualization: false   # Audio-Wellenform anzeigen
+        latencyMeasurement: false   # Latenz messen
+        performanceMetrics: false   # Performance-Metriken
+
+    providers:
+      # OpenAI-kompatible Endpunkte
+      - id: openai
+        kind: openai-compat
+        baseUrl: https://api.openai.com/v1
+        apiKeyRef: OPENAI_API_KEY
+        models:
+          - name: gpt-4.1
+            context: 200000
+            caps: ["tools","json","long"]
+            price:
+              inputPerMTok: 2.00
+              outputPerMTok: 8.00
+          - name: gpt-4o
+            context: 128000
+            caps: ["vision","tools","json"]
+            price:
+              inputPerMTok: 2.50
+              cachedInputPerMTok: 1.25
+              outputPerMTok: 10.00
+          - name: gpt-4o-mini
+            context: 128000
+            caps: ["cheap","tools","json","voice"]
+            price:
+              inputPerMTok: 0.15
+              cachedInputPerMTok: 0.08
+              outputPerMTok: 0.60
+
+      # DeepSeek (OpenAI-kompatibel)
+      - id: deepseek
+        kind: openai-compat
+        baseUrl: https://api.deepseek.com/v1
+        apiKeyRef: DEEPSEEK_API_KEY
+        models:
+          - name: deepseek-v3
+            context: 128000
+            caps: ["tools","json","long"]
+            price:
+              inputPerMTok: 1.14
+              outputPerMTok: 4.56
+          - name: deepseek-r1
+            context: 128000
+            caps: ["reasoning","tools"]
+            price:
+              inputPerMTok: 1.35
+              outputPerMTok: 5.40
+
+      # xAI Grok (OpenAI-kompatibel)
+      - id: grok
+        kind: openai-compat
+        baseUrl: https://api.x.ai/v1
+        apiKeyRef: GROK_API_KEY
+        models:
+          - name: grok-3
+            context: 131072
+            caps: ["tools","json"]
+            price:
+              inputPerMTok: 3.00
+              outputPerMTok: 15.00
+          - name: grok-3-mini
+            context: 131072
+            caps: ["cheap","tools","voice"]
+            price:
+              inputPerMTok: 0.25
+              outputPerMTok: 1.27
+
+      # Microsoft Phi (OpenAI-kompatible Gateways)
+      - id: phi
+        kind: openai-compat
+        baseUrl: https://api.example-phi.com/v1
+        apiKeyRef: PHI_API_KEY
+        models:
+          - name: phi-4
+            context: 128000
+            caps: ["cheap","tools","json","long","voice"]
+            price:
+              inputPerMTok: 0.13
+              outputPerMTok: 0.50
+          - name: phi-4-mini-instruct
+            context: 128000
+            caps: ["ultracheap","tools","voice"]
+            price:
+              inputPerMTok: 0.08
+              outputPerMTok: 0.30
+
+      # Open-Source lokal via Ollama
+      - id: ollama
+        kind: ollama
+        baseUrl: http://127.0.0.1:11434
+        models:
+          - name: llama3.3:70b-instruct
+            context: 32768
+            caps: ["local","long","tools","voice"]
+          - name: qwen2.5-coder:32b-instruct
+            context: 32768
+            caps: ["local","coder","voice"]
+
+    routing:
+      rules:
+        # 1) Tests & Boilerplate → günstige Mini‑Modelle
+        - id: cheap-tests
+          if:
+            anyKeyword: ["test", "unit test", "boilerplate", "types", "docstring"]
+            fileLangIn: ["ts","tsx","js","py","go","java","csharp"]
+          then:
+            prefer: ["openai:gpt-4o-mini", "phi:phi-4-mini-instruct", "grok:grok-3-mini"]
+            target: chat
+
+        # 2) Harte Bugs/Algorithmik → Reasoning‑Modelle
+        - id: hard-bug
+          if:
+            anyKeyword: ["prove", "optimize", "complexity", "deadlock", "race", "segfault", "undefined behavior"]
+          then:
+            prefer: ["deepseek:deepseek-r1", "openai:gpt-4.1", "deepseek:deepseek-v3"]
+            target: chat
+
+        # 3) Große Refactors/Long‑Context
+        - id: refactor-long
+          if:
+            minContextKB: 128
+          then:
+            prefer: ["openai:gpt-4.1", "openai:gpt-4o", "phi:phi-4"]
+            target: chat
+
+        # 4) Offline/Privacy → lokal erzwingen
+        - id: privacy
+          if:
+            privacyStrict: true
+          then:
+            prefer: ["ollama:llama3.3:70b-instruct", "ollama:qwen2.5-coder:32b-instruct"]
+            target: chat
+
+        # 5) Voice-Eingabe → schnelle, voice-optimierte Modelle
+        - id: voice-input
+          if:
+            anyKeyword: ["voice", "speech", "spoken"]
+          then:
+            prefer: ["openai:gpt-4o-mini", "phi:phi-4", "grok:grok-3-mini", "ollama:qwen2.5-coder:32b-instruct"]
+            target: chat
+
+        # 6) Dokumentation → kreative Modelle
+        - id: documentation
+          if:
+            anyKeyword: ["document", "readme", "explain", "comment"]
+          then:
+            prefer: ["openai:gpt-4o", "deepseek:deepseek-v3"]
+            target: chat
+
+      default:
+        prefer: ["openai:gpt-4o-mini", "phi:phi-4", "deepseek:deepseek-v3", "ollama:qwen2.5-coder:32b-instruct"]
+        target: chat

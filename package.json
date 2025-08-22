@@ -1,0 +1,148 @@
+{
+  "name": "model-router",
+  "displayName": "Model Router (VSCode/Cursor)",
+  "description": "Automatische KI-Modell-Auswahl mit Routing-Engine, Kostenmanagement und Privacy-Modi",
+  "publisher": "model-router",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other",
+    "Machine Learning"
+  ],
+  "keywords": [
+    "ai",
+    "llm",
+    "model",
+    "router",
+    "openai",
+    "ollama",
+    "cost-aware"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:modelRouter.chat",
+    "onCommand:modelRouter.setApiKey"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "Model Router",
+      "properties": {
+        "modelRouter.configPath": {
+          "type": "string",
+          "default": "${workspaceFolder}/router.config.yaml",
+          "description": "Pfad zur Router-Konfiguration (YAML)."
+        },
+        "modelRouter.mode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "speed",
+            "quality",
+            "cheap",
+            "local-only",
+            "offline",
+            "privacy-strict"
+          ],
+          "default": "auto",
+          "description": "Aktiver Routing-Modus"
+        },
+        "modelRouter.enablePromptClassifier": {
+          "type": "boolean",
+          "default": false,
+          "description": "Erweiterte Prompt-Klassifikation aktivieren"
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "modelRouter.chat",
+        "title": "Model Router: Chat",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "modelRouter.routeOnce",
+        "title": "Model Router: Route Prompt Once",
+        "icon": "$(search)"
+      },
+      {
+        "command": "modelRouter.setApiKey",
+        "title": "Model Router: Set API Key (Provider)",
+        "icon": "$(key)"
+      },
+      {
+        "command": "modelRouter.switchMode",
+        "title": "Model Router: Switch Mode",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "modelRouter.openConfig",
+        "title": "Model Router: Open Config",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "modelRouter.showCosts",
+        "title": "Model Router: Show Costs",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "modelRouter.testConnection",
+        "title": "Model Router: Test Provider Connection",
+        "icon": "$(plug)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "modelRouter.chat"
+        },
+        {
+          "command": "modelRouter.routeOnce"
+        },
+        {
+          "command": "modelRouter.setApiKey"
+        },
+        {
+          "command": "modelRouter.switchMode"
+        },
+        {
+          "command": "modelRouter.openConfig"
+        },
+        {
+          "command": "modelRouter.showCosts"
+        },
+        {
+          "command": "modelRouter.testConnection"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "test": "node ./out/test/runTest.js",
+    "package": "vsce package",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.12",
+    "@types/vscode": "^1.103.0",
+    "@typescript-eslint/eslint-plugin": "^7.8.0",
+    "@typescript-eslint/parser": "^7.8.0",
+    "eslint": "^8.57.0",
+    "typescript": "^5.9.2",
+    "vsce": "^2.15.0"
+  },
+  "dependencies": {
+    "yaml": "^2.4.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/model-router.git"
+  },
+  "license": "MIT"
+}
