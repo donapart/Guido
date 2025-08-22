@@ -72,6 +72,11 @@
           "type": "boolean",
           "default": true,
           "description": "Chatverlauf (letzte 1000 Nachrichten) zwischen Sessions speichern"
+        },
+        "modelRouter.chat.showDockView": {
+          "type": "boolean",
+          "default": true,
+          "description": "Andockbare Chat-Ansicht (Explorer) anzeigen"
         }
       }
     },
@@ -234,7 +239,7 @@
           "type": "webview",
           "id": "modelRouterChatDock",
           "name": "💬 Model Router Chat (Dock)",
-          "when": "false",
+          "when": "config.modelRouter.chat.showDockView",
           "icon": "$(comment-discussion)"
         }
       ]
