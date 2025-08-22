@@ -91,6 +91,31 @@
         "command": "modelRouter.testConnection",
         "title": "Model Router: Test Provider Connection",
         "icon": "$(plug)"
+      },
+      {
+        "command": "modelRouter.startVoiceControl",
+        "title": "Model Router: Start Voice Control (Guido)",
+        "icon": "$(mic)"
+      },
+      {
+        "command": "modelRouter.stopVoiceControl",
+        "title": "Model Router: Stop Voice Control",
+        "icon": "$(mic-off)"
+      },
+      {
+        "command": "modelRouter.toggleVoiceControl", 
+        "title": "Model Router: Toggle Voice Control",
+        "icon": "$(mic-filled)"
+      },
+      {
+        "command": "modelRouter.voiceSettings",
+        "title": "Model Router: Voice Settings",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "modelRouter.voicePermissions",
+        "title": "Model Router: Voice Permissions & Privacy",
+        "icon": "$(shield)"
       }
     ],
     "menus": {
