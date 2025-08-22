@@ -340,9 +340,9 @@ export class VoiceController {
 
       return response;
 
-    } catch (error) {
-      throw new Error(`AI response generation failed: ${error.message}`);
-    }
+         } catch (error) {
+       throw new Error(`AI response generation failed: ${error instanceof Error ? error.message : String(error)}`);
+     }
   }
 
   /**

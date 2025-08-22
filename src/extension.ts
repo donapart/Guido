@@ -33,6 +33,9 @@ let extensionContext: vscode.ExtensionContext;
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   console.log("Aktiviere Model Router Extension...");
 
+  // Store extension context globally
+  extensionContext = context;
+
   // Initialize extension state
   state = {
     providers: new Map(),
@@ -703,7 +706,7 @@ async function initializeVoiceControl(voiceConfig: VoiceConfig): Promise<void> {
       throw new Error("Router muss initialisiert sein bevor Voice Control gestartet werden kann");
     }
 
-    state.voiceController = new VoiceController(context, voiceConfig, state.router);
+    state.voiceController = new VoiceController(extensionContext, voiceConfig, state.router);
     await state.voiceController.initialize();
 
     state.outputChannel.appendLine("✅ Voice Control initialisiert");

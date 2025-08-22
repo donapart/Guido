@@ -438,19 +438,19 @@ Verwende den passenden Dokumentations-Stil für die Sprache (JSDoc, DocString, e
           }
         }
       };
-    } catch (error) {
-      return {
-        text: `Fehler bei ${operation}: ${error.message}`,
-        shouldSpeak: true,
-        metadata: {
-          model: "error",
-          provider: "system",
-          cost: 0,
-          duration: 0,
-          tokens: { input: 0, output: 0 }
-        }
-      };
-    }
+         } catch (error) {
+       return {
+         text: `Fehler bei ${operation}: ${error instanceof Error ? error.message : String(error)}`,
+         shouldSpeak: true,
+         metadata: {
+           model: "error",
+           provider: "system",
+           cost: 0,
+           duration: 0,
+           tokens: { input: 0, output: 0 }
+         }
+       };
+     }
   }
 
   private createSystemResponse(message: string, action: string): VoiceResponse {
