@@ -5,7 +5,7 @@
   "publisher": "model-router",
   "version": "0.1.0",
   "engines": {
-    "vscode": "^1.90.0"
+    "vscode": "^1.103.0"
   },
   "categories": [
     "Other",

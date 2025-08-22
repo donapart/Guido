@@ -1,6 +1,6 @@
-# Model Router für VSCode/Cursor
+# Model Router für VSCode/Cursor mit Guido Voice Control 🎤
 
-Eine intelligente VSCode-Extension, die **automatisch das optimale KI-Modell** für jede Aufgabe auswählt. Mit Unterstützung für OpenAI, DeepSeek, Grok, Phi, Ollama und anderen Providern.
+Eine intelligente VSCode-Extension, die **automatisch das optimale KI-Modell** für jede Aufgabe auswählt. Mit **vollständiger Sprachsteuerung "Guido"**, Unterstützung für OpenAI, DeepSeek, Grok, Phi, Ollama und anderen Providern.
 
 ## 🎯 Features
 
