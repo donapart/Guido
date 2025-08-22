@@ -2,7 +2,7 @@
  * Audio Manager - Handles TTS, beeps, and audio processing for Guido Voice Control
  */
 
-import { VoiceConfig, TTSOptions, BeepSound } from "../types";
+import { BeepSound, TTSOptions, VoiceConfig } from "../types";
 
 export class AudioManager {
   private config: VoiceConfig;
