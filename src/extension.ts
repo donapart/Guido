@@ -765,12 +765,10 @@ async function handleChatCommand(): Promise<void> {
 
   // Execute chat (stream to OutputChannel)
   // Hinweis: Vollständige Antwort könnte später für Folgefunktionen genutzt werden
-  let _responseText = ""; // um Lint zu vermeiden, vorerst ungenutzt
     for await (const chunk of result.provider.chat(result.modelName, [
       { role: "user", content: prompt }
     ])) {
       if (chunk.type === "text" && chunk.data) {
-  _responseText += chunk.data;
         state.outputChannel.append(chunk.data);
       } else if (chunk.type === "done") {
         state.outputChannel.appendLine("\n" + "─".repeat(50));
