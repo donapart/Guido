@@ -5,6 +5,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import YAML from "yaml";
+import { VoiceConfig } from "./voice/types";
 
 export interface ModelPrice {
   inputPerMTok: number;
@@ -79,9 +80,6 @@ export interface ProfileConfig {
     };
   };
 }
-
-// Import VoiceConfig from voice types
-import { VoiceConfig } from "./voice/types";
 
 export interface RouterConfig {
   version: number;
