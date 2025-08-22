@@ -1,0 +1,84 @@
+{
+  "displayName": "Model Router (VSCode/Cursor)",
+  "description": "Automatic AI model selection with routing engine, cost management and Guido voice control",
+  
+  "command.chat.title": "Model Router: Chat",
+  "command.routeOnce.title": "Model Router: Route Prompt Once", 
+  "command.setApiKey.title": "Model Router: Set API Key (Provider)",
+  "command.switchMode.title": "Model Router: Switch Mode",
+  "command.openConfig.title": "Model Router: Open Config",
+  "command.showCosts.title": "Model Router: Show Costs",
+  "command.testConnection.title": "Model Router: Test Provider Connection",
+  "command.startVoiceControl.title": "Model Router: Start Voice Control (Guido)",
+  "command.stopVoiceControl.title": "Model Router: Stop Voice Control",
+  "command.toggleVoiceControl.title": "Model Router: Toggle Voice Control",
+  "command.voiceSettings.title": "Model Router: Voice Settings",
+  "command.voicePermissions.title": "Model Router: Voice Permissions & Privacy",
+  
+  "config.configPath.description": "Path to router configuration (YAML).",
+  "config.mode.description": "Active routing mode",
+  "config.enablePromptClassifier.description": "Enable advanced prompt classification",
+  
+  "view.guidoVoiceControl.name": "🎤 Guido Voice Control",
+  
+  "notification.voiceControlReady": "🎤 Guido Voice Control is ready!",
+  "notification.voiceControlStarted": "🎤 Guido Voice Control started! Say 'Guido' to begin.",
+  "notification.voiceControlStopped": "🛑 Voice Control stopped",
+  "notification.microphonePermissionRequired": "🎤 Microphone permission required",
+  "notification.apiKeySaved": "✅ API Key saved for {0}",
+  "notification.configurationLoaded": "Configuration loaded: {0} providers, mode: {1}",
+  
+  "error.configurationNotFound": "Configuration file not found: {0}",
+  "error.providerNotFound": "Provider {0} not found",
+  "error.routerNotInitialized": "Router not initialized",
+  "error.voiceControlNotInitialized": "Voice Control is not initialized",
+  "error.microphonePermissionDenied": "Microphone permission was denied",
+  
+  "voice.wakeWordDetected": "Wake word detected!",
+  "voice.recordingStarted": "🔴 Recording - say 'stop' to end",
+  "voice.processingInput": "🧠 Processing input...",
+  "voice.confirmationRequired": "🤔 Confirmation required",
+  "voice.actionCancelled": "❌ Action cancelled",
+  "voice.recordingTimeout": "⏰ Recording timeout reached",
+  "voice.confirmationTimeout": "⏰ Confirmation timeout reached",
+  
+  "privacy.gdprConsent": "🔒 Privacy consent for Guido Voice Control",
+  "privacy.dataProcessingAgreement": "This extension processes voice data for functionality. Under GDPR, we request your consent.",
+  "privacy.consentGiven": "✅ Consent given. You can revoke this decision at any time in settings.",
+  "privacy.consentRequired": "❌ Voice Control cannot be used without consent. Functions have been disabled.",
+  "privacy.allDataDeleted": "✅ All stored data deleted",
+  
+  "voice.commands.system.mute": "Microphone muted",
+  "voice.commands.system.unmute": "Microphone activated",
+  "voice.commands.system.volumeUp": "Volume increased",
+  "voice.commands.system.volumeDown": "Volume decreased",
+  "voice.commands.system.speedUp": "Speech speed increased",
+  "voice.commands.system.speedDown": "Speech speed decreased",
+  
+  "voice.commands.language.switchToEnglish": "Switching to English language",
+  "voice.commands.language.switchToGerman": "Wechsle zur deutschen Sprache",
+  "voice.commands.language.switchToFrench": "Je passe au français",
+  "voice.commands.language.switchToSpanish": "Cambiando al español",
+  "voice.commands.language.switchToItalian": "Passaggio all'italiano",
+  
+  "voice.commands.routing.modeSpeed": "Switching to fast models for better performance",
+  "voice.commands.routing.modeQuality": "Switching to high-quality models for best results",
+  "voice.commands.routing.modeCheap": "Switching to cost-effective models",
+  "voice.commands.routing.modeLocal": "Using only local models for maximum privacy",
+  "voice.commands.routing.modePrivacy": "Privacy mode activated. All data stays local",
+  
+  "voice.commands.vscode.fileOpened": "File selection opened",
+  "voice.commands.vscode.newFileCreated": "New file created",
+  "voice.commands.vscode.fileSaved": "File saved",
+  "voice.commands.vscode.codeFormatted": "Code formatted",
+  "voice.commands.vscode.searchOpened": "Search in files opened",
+  "voice.commands.vscode.replaceOpened": "Find and replace opened",
+  "voice.commands.vscode.gitStatusShown": "Git status displayed",
+  "voice.commands.vscode.terminalOpened": "New terminal opened",
+  
+  "voice.commands.dev.selectCodeFirst": "Please select code or open a file first",
+  
+  "voice.builtin.statusResponse": "I am ready and functional. How can I help you?",
+  "voice.builtin.helpResponse": "I can help you with code development, file management, Git operations and much more. For example, say 'Explain this code' or 'Open file'.",
+  "voice.builtin.timeResponse": "It is {0} o'clock."
+}
