@@ -195,14 +195,18 @@ export class ExperimentalVoiceFeatures {
       ).length;
     }
 
-    const primaryEmotion = Object.entries(emotionScores)
-      .sort(([,a], [,b]) => b - a)[0];
+    const sortedEmotions = Object.entries(emotionScores).sort(([,a], [,b]) => b - a);
 
-    return {
-      emotion: primaryEmotion[0] || 'neutral',
-      confidence: Math.min(primaryEmotion[1] / 3, 1.0),
-      intensity: primaryEmotion[1] / 5
-    };
+    if (sortedEmotions.length > 0 && sortedEmotions[0][1] > 0) {
+        const [emotion, score] = sortedEmotions[0];
+        return {
+            emotion,
+            confidence: Math.min(score / 3, 1.0), // Normalize confidence
+            intensity: score / 5
+        };
+    }
+
+    return { emotion: 'neutral', confidence: 0.5, intensity: 0.1 };
   }
 
   private async analyzeSentiment(transcript: string): Promise<any> {
@@ -286,10 +290,12 @@ export class ExperimentalVoiceFeatures {
       ).length;
     }
 
-    const detectedLang = Object.entries(scores)
-      .sort(([,a], [,b]) => b - a)[0];
+    const sortedScores = Object.entries(scores).sort(([, a], [, b]) => b - a);
 
-    return detectedLang[1] > 0 ? detectedLang[0] : 'de';
+    if (sortedScores.length > 0 && sortedScores[0][1] > 0) {
+        return sortedScores[0][0]; // Return language with the highest score
+    }
+    return 'de'; // Fallback to German
   }
 
   private async translateToGerman(text: string, sourceLanguage: string): Promise<string> {
