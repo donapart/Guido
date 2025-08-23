@@ -221,7 +221,7 @@ Wir freuen uns über Beiträge! Bitte öffnen Sie Issues oder Pull Requests für
 
 ## 📄 Lizenz
 
-MIT License - siehe [LICENSE](LICENSE) für Details.
+MIT License - siehe LICENSE-Datei für Details.
 
 ## 🙏 Danksagungen
 
