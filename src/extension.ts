@@ -19,6 +19,7 @@ import { ExperimentalRouting } from "./router/experimental/advancedRouting";
 import { VSCodeSecretManager } from "./secret";
 import { AdvancedDashboardUI } from "./ui/advancedDashboard";
 import { logger } from "./utils/logger";
+import { checkForUpdates } from "./updates";
 import { ContextAwareVoiceCommands } from "./voice/contextAwareVoiceCommands";
 import { ExperimentalVoiceFeatures } from "./voice/experimental/advancedVoiceFeatures";
 import {
@@ -59,8 +60,13 @@ export async function activate(context: vscode.ExtensionContext) {
   try {
     // Initialize logger early
     logger.init(context);
-    logger.info("Extension activate called", { version: '0.2.1', time: new Date().toISOString() });
-    console.log('[Guido] Extension activate called - v0.2.1');
+    logger.info("Extension activate called", { version: '0.2.2', time: new Date().toISOString() });
+    console.log('[Guido] Extension activate called - v0.2.2');
+    
+    // Check for updates
+    checkForUpdates(context).catch(err => {
+      logger.error('Failed to check for updates', err);
+    });
     // Debug-Meldung, um die Aktivierung zu bestätigen
     vscode.window.showInformationMessage('Guido wird gestartet...');
 

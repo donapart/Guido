@@ -6,7 +6,7 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable", "WebWorker"],
     "sourceMap": true,
     "rootDir": "src",
-    "strict": false,
+    "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
