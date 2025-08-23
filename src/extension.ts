@@ -12,7 +12,7 @@ import { VoiceController } from './voice/voiceController';
 import type { VoiceConfig } from './voice/types';
 import { ExperimentalVoiceFeatures } from './voice/experimental/advancedVoiceFeatures';
 import { ExperimentalRouting } from './router/experimental/advancedRouting';
-import { ExperimentalNLP } from './voice/experimental/naturalLanguageProcessor';
+import { ExperimentalNLP, UserContextForPersonality } from './voice/experimental/naturalLanguageProcessor';
 import { ExperimentalUI } from './voice/webview/experimentalUI';
 
 interface ExtensionState {
@@ -500,14 +500,11 @@ async function handleExperimentalPersonalityAdaptation() {
   }
   
   try {
-    const userPreferences = {
+    const userPreferences: UserContextForPersonality = {
       expertise: 'intermediate',
-      communicationStyle: 'casual',
-      preferences: {
-        formality: 0.3,
-        verbosity: 0.6,
-        humor: 0.4
-      }
+      formality: 0.3,
+      verbosity: 0.6,
+      humor: 0.4
     };
     
     const personality = await state.experimentalNLP.adaptPersonality(userPreferences);

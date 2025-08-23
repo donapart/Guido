@@ -69,10 +69,10 @@ class ExperimentalNLP {
     /**
      * Persönlichkeitsanpassung
      */
-    async adaptPersonality(userPreferences) {
+    async adaptPersonality(userContext) {
         try {
-            const personality = await this.analyzeUserPreferences(userPreferences);
-            const adaptivePersonality = this.createAdaptivePersonality(personality);
+            const analyzedPreferences = await this.analyzeUserPreferences(userContext);
+            const adaptivePersonality = this.createAdaptivePersonality(userContext, analyzedPreferences);
             return adaptivePersonality;
         }
         catch (error) {
@@ -354,34 +354,32 @@ class ExperimentalNLP {
             .filter(entry => now.getTime() - entry.timestamp.getTime() < maxAge)
             .slice(-maxContextEntries);
     }
-    async analyzeUserPreferences(userPreferences) {
+    async analyzeUserPreferences(userContext) {
         // Analysiere Benutzer-Präferenzen aus verschiedenen Quellen
         const preferences = {
-            technicalLevel: this.determineTechnicalLevel(userPreferences),
-            communicationStyle: this.determineCommunicationStyle(userPreferences),
-            responseStyle: this.determineResponseStyle(userPreferences),
-            language: userPreferences.language || 'de',
-            preferredModels: userPreferences.preferredModels || ['gpt-4o-mini']
+            technicalLevel: this.determineTechnicalLevel(userContext),
+            communicationStyle: this.determineCommunicationStyle(userContext),
+            responseStyle: this.determineResponseStyle(userContext),
         };
         return preferences;
     }
-    createAdaptivePersonality(preferences) {
-        const basePersonality = this.personalityProfiles.get(preferences.technicalLevel) ||
+    createAdaptivePersonality(userContext, analyzedPrefs) {
+        const basePersonality = this.personalityProfiles.get(analyzedPrefs.technicalLevel) ||
             this.getDefaultPersonality();
         // Passe Persönlichkeit basierend auf Präferenzen an
         const adaptivePersonality = {
-            style: preferences.communicationStyle,
-            formality: this.calculateFormality(preferences),
-            verbosity: this.calculateVerbosity(preferences),
-            technicalLevel: this.calculateTechnicalLevel(preferences),
-            humor: this.calculateHumor(preferences),
-            patience: this.calculatePatience(preferences)
+            style: analyzedPrefs.communicationStyle,
+            formality: this.calculateFormality(userContext, analyzedPrefs),
+            verbosity: this.calculateVerbosity(userContext, analyzedPrefs),
+            technicalLevel: this.calculateTechnicalLevel(analyzedPrefs),
+            humor: this.calculateHumor(userContext, analyzedPrefs),
+            patience: this.calculatePatience(userContext, analyzedPrefs)
         };
         return adaptivePersonality;
     }
     getDefaultPersonality() {
         return {
-            style: 'helpful',
+            style: 'balanced',
             formality: 0.5,
             verbosity: 0.6,
             technicalLevel: 0.5,
@@ -389,51 +387,51 @@ class ExperimentalNLP {
             patience: 0.7
         };
     }
-    determineTechnicalLevel(preferences) {
-        if (preferences.expertise === 'expert' || preferences.complexCommands > 5) {
+    determineTechnicalLevel(userContext) {
+        if (userContext.expertise === 'expert' || (userContext.complexCommands || 0) > 5) {
             return 'expert';
         }
-        else if (preferences.expertise === 'beginner' || preferences.complexCommands < 2) {
+        else if (userContext.expertise === 'beginner' || (userContext.complexCommands || 0) < 2) {
             return 'beginner';
         }
         return 'intermediate';
     }
-    determineCommunicationStyle(preferences) {
-        if (preferences.formality > 0.7)
+    determineCommunicationStyle(userContext) {
+        if ((userContext.formality || 0) > 0.7)
             return 'formal';
-        if (preferences.casualness > 0.7)
+        if ((userContext.casualness || 0) > 0.7)
             return 'casual';
         return 'balanced';
     }
-    determineResponseStyle(preferences) {
-        if (preferences.detailed > 0.7)
+    determineResponseStyle(userContext) {
+        if ((userContext.detailed || 0) > 0.7)
             return 'detailed';
-        if (preferences.concise > 0.7)
+        if ((userContext.concise || 0) > 0.7)
             return 'concise';
         return 'balanced';
     }
-    calculateFormality(preferences) {
-        const baseFormality = preferences.formality || 0.5;
-        const technicalAdjustment = preferences.technicalLevel === 'expert' ? 0.2 : -0.1;
+    calculateFormality(userContext, analyzedPrefs) {
+        const baseFormality = userContext.formality || 0.5;
+        const technicalAdjustment = analyzedPrefs.technicalLevel === 'expert' ? 0.2 : -0.1;
         return Math.max(0, Math.min(1, baseFormality + technicalAdjustment));
     }
-    calculateVerbosity(preferences) {
-        const baseVerbosity = preferences.verbosity || 0.6;
-        const styleAdjustment = preferences.responseStyle === 'detailed' ? 0.3 : -0.2;
+    calculateVerbosity(userContext, analyzedPrefs) {
+        const baseVerbosity = userContext.verbosity || 0.6;
+        const styleAdjustment = analyzedPrefs.responseStyle === 'detailed' ? 0.3 : -0.2;
         return Math.max(0, Math.min(1, baseVerbosity + styleAdjustment));
     }
-    calculateTechnicalLevel(preferences) {
+    calculateTechnicalLevel(analyzedPrefs) {
         const technicalLevels = { beginner: 0.2, intermediate: 0.5, expert: 0.9 };
-        return technicalLevels[preferences.technicalLevel] || 0.5;
+        return technicalLevels[analyzedPrefs.technicalLevel] || 0.5;
     }
-    calculateHumor(preferences) {
-        const baseHumor = preferences.humor || 0.3;
-        const styleAdjustment = preferences.communicationStyle === 'casual' ? 0.3 : -0.1;
+    calculateHumor(userContext, analyzedPrefs) {
+        const baseHumor = userContext.humor || 0.3;
+        const styleAdjustment = analyzedPrefs.communicationStyle === 'casual' ? 0.3 : -0.1;
         return Math.max(0, Math.min(1, baseHumor + styleAdjustment));
     }
-    calculatePatience(preferences) {
-        const basePatience = preferences.patience || 0.7;
-        const expertiseAdjustment = preferences.technicalLevel === 'beginner' ? 0.2 : -0.1;
+    calculatePatience(userContext, analyzedPrefs) {
+        const basePatience = userContext.patience || 0.7;
+        const expertiseAdjustment = analyzedPrefs.technicalLevel === 'beginner' ? 0.2 : -0.1;
         return Math.max(0, Math.min(1, basePatience + expertiseAdjustment));
     }
     extractContextualInfo(memory, intent) {

@@ -178,13 +178,16 @@ class ExperimentalVoiceFeatures {
         for (const [emotion, keywords] of Object.entries(emotionKeywords)) {
             emotionScores[emotion] = keywords.filter(keyword => words.some(word => word.includes(keyword))).length;
         }
-        const primaryEmotion = Object.entries(emotionScores)
-            .sort(([, a], [, b]) => b - a)[0];
-        return {
-            emotion: primaryEmotion[0] || 'neutral',
-            confidence: Math.min(primaryEmotion[1] / 3, 1.0),
-            intensity: primaryEmotion[1] / 5
-        };
+        const sortedEmotions = Object.entries(emotionScores).sort(([, a], [, b]) => b - a);
+        if (sortedEmotions.length > 0 && sortedEmotions[0][1] > 0) {
+            const [emotion, score] = sortedEmotions[0];
+            return {
+                emotion,
+                confidence: Math.min(score / 3, 1.0), // Normalize confidence
+                intensity: score / 5
+            };
+        }
+        return { emotion: 'neutral', confidence: 0.5, intensity: 0.1 };
     }
     async analyzeSentiment(transcript) {
         // Einfache Sentiment-Analyse
@@ -251,9 +254,11 @@ class ExperimentalVoiceFeatures {
         for (const [lang, patterns] of Object.entries(languagePatterns)) {
             scores[lang] = patterns.filter(pattern => words.some(word => word.includes(pattern))).length;
         }
-        const detectedLang = Object.entries(scores)
-            .sort(([, a], [, b]) => b - a)[0];
-        return detectedLang[1] > 0 ? detectedLang[0] : 'de';
+        const sortedScores = Object.entries(scores).sort(([, a], [, b]) => b - a);
+        if (sortedScores.length > 0 && sortedScores[0][1] > 0) {
+            return sortedScores[0][0]; // Return language with the highest score
+        }
+        return 'de'; // Fallback to German
     }
     async translateToGerman(text, sourceLanguage) {
         // Einfache Übersetzung (in Produktion würde hier ein echter Übersetzer stehen)

@@ -429,12 +429,9 @@ async function handleExperimentalPersonalityAdaptation() {
     try {
         const userPreferences = {
             expertise: 'intermediate',
-            communicationStyle: 'casual',
-            preferences: {
-                formality: 0.3,
-                verbosity: 0.6,
-                humor: 0.4
-            }
+            formality: 0.3,
+            verbosity: 0.6,
+            humor: 0.4
         };
         const personality = await state.experimentalNLP.adaptPersonality(userPreferences);
         vscode.window.showInformationMessage(`🎭 Angepasste Persönlichkeit: ${personality.style} (Formalität: ${personality.formality})`);

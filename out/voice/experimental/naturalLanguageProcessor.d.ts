@@ -58,6 +58,23 @@ export interface ContextEntry {
     relevance: number;
     tags: string[];
 }
+/**
+ * Represents the raw user context and preferences used for personality adaptation.
+ * This is the input for the analysis.
+ */
+export interface UserContextForPersonality {
+    expertise?: 'beginner' | 'intermediate' | 'expert';
+    complexCommands?: number;
+    formality?: number;
+    casualness?: number;
+    detailed?: number;
+    concise?: number;
+    verbosity?: number;
+    humor?: number;
+    patience?: number;
+    language?: string;
+    preferredModels?: string[];
+}
 export declare class ExperimentalNLP {
     private conversationMemories;
     private personalityProfiles;
@@ -76,7 +93,7 @@ export declare class ExperimentalNLP {
     /**
      * Persönlichkeitsanpassung
      */
-    adaptPersonality(userPreferences: any): Promise<Personality>;
+    adaptPersonality(userContext: UserContextForPersonality): Promise<Personality>;
     /**
      * Kontext-basierte Antwortgenerierung
      */
