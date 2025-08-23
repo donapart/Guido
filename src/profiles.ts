@@ -1,5 +1,5 @@
 // src/profiles.ts
-// Implementierung für Profile und Presets
+// Profile-Manager für Guido Model Router
 
 import * as vscode from 'vscode';
 import * as path from 'path';
@@ -20,21 +20,16 @@ export class ProfileManager {
         this.context = context;
         this.profilesDir = path.join(context.extensionPath, 'profiles');
         
-        // Erstelle Profiles-Verzeichnis, wenn es nicht existiert
         if (!fs.existsSync(this.profilesDir)) {
             fs.mkdirSync(this.profilesDir, { recursive: true });
         }
     }
 
-    /**
-     * Initialisiert den Profile-Manager und lädt verfügbare Profile
-     */
     public async initialize(): Promise<void> {
         try {
             logger.info('Initialisiere Profile-Manager');
             await this.loadProfiles();
             
-            // Lade aktuelles Profil aus den Einstellungen
             const config = vscode.workspace.getConfiguration('modelRouter');
             this.currentProfile = config.get<string>('profiles.defaultProfile', 'standard');
             
@@ -44,15 +39,10 @@ export class ProfileManager {
         }
     }
 
-    /**
-     * Lädt alle verfügbaren Profile
-     */
     private async loadProfiles(): Promise<void> {
         try {
-            // Lade Standard-Profile
             this.loadStandardProfiles();
             
-            // Lade benutzerdefinierte Profile aus dem Profiles-Verzeichnis
             if (fs.existsSync(this.profilesDir)) {
                 const files = fs.readdirSync(this.profilesDir);
                 for (const file of files) {
@@ -78,13 +68,128 @@ export class ProfileManager {
         }
     }
 
-    /**
-     * Lädt die Standard-Profile
-     */
     private loadStandardProfiles(): void {
-        // Standard-Profil - OHNE Voice-Konfiguration
+        // Standard-Voice-Konfiguration für alle Profile
+        const standardVoiceConfig = {
+            enabled: true,
+            wakeWord: "Guido",
+            alternativeWakeWords: ["Hey Guido", "OK Guido"],
+            language: {
+                recognition: "de-DE" as const,
+                response: "de" as const,
+                autoDetect: true,
+                supportedLanguages: ["de-DE" as const, "en-US" as const]
+            },
+            audio: {
+                enableBeep: true,
+                beepSound: "success" as const,
+                inputDevice: "default",
+                outputDevice: "default",
+                volume: 0.8,
+                mute: false,
+                customVoice: undefined,
+                ttsEngine: "system" as const,
+                ttsOptions: {
+                    speed: 1.0,
+                    pitch: 1.0,
+                    volume: 0.8
+                }
+            },
+            recording: {
+                maxDuration: 30,
+                enableVAD: true,
+                vadSensitivity: 0.5,
+                noiseReduction: true,
+                echoCancellation: true,
+                autoGainControl: true
+            },
+            confirmation: {
+                required: false,
+                summaryEnabled: true,
+                smartConfirmation: true,
+                confirmWords: {
+                    de: ["ja", "ok", "bestätigen"],
+                    en: ["yes", "ok", "confirm"],
+                    fr: ["oui", "ok", "confirmer"],
+                    es: ["sí", "ok", "confirmar"]
+                },
+                cancelWords: {
+                    de: ["nein", "abbrechen", "stop"],
+                    en: ["no", "cancel", "stop"],
+                    fr: ["non", "annuler", "stop"],
+                    es: ["no", "cancelar", "stop"]
+                },
+                timeoutSeconds: 5,
+                repeatSummary: false,
+                askForClarification: true
+            },
+            processing: {
+                contextAwareness: true,
+                emotionDetection: false,
+                intentRecognition: true,
+                multiTurnConversation: true,
+                memoryEnabled: false,
+                personalityMode: "professional" as const,
+                grammarCorrection: true,
+                slangDetection: false,
+                abbreviationExpansion: true
+            },
+            routing: {
+                mode: "auto" as const,
+                rules: [],
+                fallback: "text",
+                priorityProvider: "openai"
+            },
+            permissions: {
+                required: [],
+                whitelist: [],
+                blacklist: []
+            },
+            commands: {
+                basic: {
+                    enabled: true,
+                    commands: ["start", "stop", "help", "status"]
+                }
+            },
+            interface: {
+                showStatus: true,
+                visualFeedback: true,
+                statusPosition: "bottomRight" as const
+            },
+            analytics: {
+                enabled: false,
+                anonymous: true,
+                includeAudio: false,
+                performanceMetrics: false
+            },
+            advanced: {
+                debug: false,
+                experimental: {
+                    enabled: false,
+                    features: []
+                },
+                customWakeWords: {
+                    enabled: false,
+                    sensitivity: 0.7
+                }
+            },
+            emergency: {
+                panicMode: "stop",
+                debugMode: false,
+                verboseLogging: false,
+                fallbackToText: true,
+                errorRecovery: {
+                    maxRetries: 3,
+                    backoffStrategy: "exponential" as const,
+                    resetTimeout: 60000
+                }
+            }
+        };
+
+        // Standard-Profil: Automatische Auswahl
         const standardProfile: ProfileConfig = {
             mode: "auto",
+            voice: standardVoiceConfig,
             providers: [],
             routing: {
                 rules: [],
@@ -96,9 +201,16 @@ export class ProfileManager {
         };
         this.profilesMap.set('standard', standardProfile);
         
-        // Leistungs-Profil - OHNE Voice-Konfiguration
+        // Leistungs-Profil: Beste Qualität
         const performanceProfile: ProfileConfig = {
             mode: "quality",
+            voice: {
+                ...standardVoiceConfig,
+                processing: {
+                    ...standardVoiceConfig.processing,
+                    timeout: 10000 // Längere Timeouts für bessere Qualität
+                }
+            },
             providers: [],
             routing: {
                 rules: [],
@@ -110,9 +222,20 @@ export class ProfileManager {
         };
         this.profilesMap.set('performance', performanceProfile);
         
-        // Schnelles Profil - OHNE Voice-Konfiguration
+        // Schnelles Profil: Schnelle Antworten
         const fastProfile: ProfileConfig = {
             mode: "speed",
+            voice: {
+                ...standardVoiceConfig,
+                processing: {
+                    ...standardVoiceConfig.processing,
+                    timeout: 2000 // Kürzere Timeouts für Geschwindigkeit
+                },
+                confirmation: {
+                    ...standardVoiceConfig.confirmation,
+                    required: false // Keine Bestätigung für Geschwindigkeit
+                }
+            },
             providers: [],
             routing: {
                 rules: [],
@@ -127,30 +250,18 @@ export class ProfileManager {
         logger.info('Standard-Profile geladen');
     }
 
-    /**
-     * Gibt alle verfügbaren Profile zurück
-     */
     public getAvailableProfiles(): string[] {
         return Array.from(this.profilesMap.keys());
     }
 
-    /**
-     * Gibt ein bestimmtes Profil zurück
-     */
     public getProfile(profileName: string): ProfileConfig | undefined {
         return this.profilesMap.get(profileName);
     }
 
-    /**
-     * Gibt das aktuelle Profil zurück
-     */
     public getCurrentProfile(): ProfileConfig | undefined {
         return this.profilesMap.get(this.currentProfile);
     }
 
-    /**
-     * Setzt das aktuelle Profil
-     */
     public async setCurrentProfile(profileName: string): Promise<boolean> {
         if (!this.profilesMap.has(profileName)) {
             logger.error(`Profil ${profileName} nicht gefunden`);
@@ -159,7 +270,6 @@ export class ProfileManager {
         
         this.currentProfile = profileName;
         
-        // Speichern in den Einstellungen
         const config = vscode.workspace.getConfiguration('modelRouter');
         await config.update('profiles.defaultProfile', profileName, vscode.ConfigurationTarget.Global);
         
@@ -167,9 +277,6 @@ export class ProfileManager {
         return true;
     }
 
-    /**
-     * Speichert ein benutzerdefiniertes Profil
-     */
     public async saveProfile(profileName: string, profileConfig: ProfileConfig): Promise<boolean> {
         try {
             this.profilesMap.set(profileName, profileConfig);
@@ -185,11 +292,7 @@ export class ProfileManager {
         }
     }
 
-    /**
-     * Löscht ein benutzerdefiniertes Profil
-     */
     public async deleteProfile(profileName: string): Promise<boolean> {
-        // Standard-Profile können nicht gelöscht werden
         if (['standard', 'performance', 'fast'].includes(profileName)) {
             logger.error(`Standard-Profil ${profileName} kann nicht gelöscht werden`);
             return false;

@@ -1,5 +1,5 @@
 // src/profiles.ts
-// Implementierung für Profile und Presets
+// Implementierung f?r Profile und Presets
 
 import * as vscode from 'vscode';
 import * as path from 'path';
@@ -8,7 +8,7 @@ import { logger } from './utils/logger';
 import { ProfileConfig } from './config';
 
 /**
- * Profile-Manager für Guido Model Router
+ * Profile-Manager f?r Guido Model Router
  */
 export class ProfileManager {
     private profilesMap: Map<string, ProfileConfig> = new Map();
@@ -27,7 +27,7 @@ export class ProfileManager {
     }
 
     /**
-     * Initialisiert den Profile-Manager und lädt verfügbare Profile
+     * Initialisiert den Profile-Manager und l?dt verf?gbare Profile
      */
     public async initialize(): Promise<void> {
         try {
@@ -45,7 +45,7 @@ export class ProfileManager {
     }
 
     /**
-     * Lädt alle verfügbaren Profile
+     * L?dt alle verf?gbaren Profile
      */
     private async loadProfiles(): Promise<void> {
         try {
@@ -79,10 +79,10 @@ export class ProfileManager {
     }
 
     /**
-     * Lädt die Standard-Profile
+     * L?dt die Standard-Profile
      */
     private loadStandardProfiles(): void {
-        // Standard-Profil
+        // Standard-Profil - OHNE Voice-Konfiguration
         const standardProfile: ProfileConfig = {
             mode: "auto",
             providers: [],
@@ -96,7 +96,7 @@ export class ProfileManager {
         };
         this.profilesMap.set('standard', standardProfile);
         
-        // Leistungs-Profil
+        // Leistungs-Profil - OHNE Voice-Konfiguration
         const performanceProfile: ProfileConfig = {
             mode: "quality",
             providers: [],
@@ -110,7 +110,7 @@ export class ProfileManager {
         };
         this.profilesMap.set('performance', performanceProfile);
         
-        // Schnelles Profil
+        // Schnelles Profil - OHNE Voice-Konfiguration
         const fastProfile: ProfileConfig = {
             mode: "speed",
             providers: [],
@@ -128,22 +128,21 @@ export class ProfileManager {
     }
 
     /**
-     * Gibt alle verfügbaren Profile zurück
+     * Gibt alle verf?gbaren Profile zur?ck
      */
     public getAvailableProfiles(): string[] {
         return Array.from(this.profilesMap.keys());
     }
 
     /**
-     * Gibt ein bestimmtes Profil zurück
-     * @param profileName Name des Profils
+     * Gibt ein bestimmtes Profil zur?ck
      */
     public getProfile(profileName: string): ProfileConfig | undefined {
         return this.profilesMap.get(profileName);
     }
 
     /**
-     * Gibt das aktuelle Profil zurück
+     * Gibt das aktuelle Profil zur?ck
      */
     public getCurrentProfile(): ProfileConfig | undefined {
         return this.profilesMap.get(this.currentProfile);
@@ -151,7 +150,6 @@ export class ProfileManager {
 
     /**
      * Setzt das aktuelle Profil
-     * @param profileName Name des Profils
      */
     public async setCurrentProfile(profileName: string): Promise<boolean> {
         if (!this.profilesMap.has(profileName)) {
@@ -165,21 +163,17 @@ export class ProfileManager {
         const config = vscode.workspace.getConfiguration('modelRouter');
         await config.update('profiles.defaultProfile', profileName, vscode.ConfigurationTarget.Global);
         
-        logger.info(`Aktuelles Profil geändert zu: ${profileName}`);
+        logger.info(`Aktuelles Profil ge?ndert zu: ${profileName}`);
         return true;
     }
 
     /**
      * Speichert ein benutzerdefiniertes Profil
-     * @param profileName Name des Profils
-     * @param profileConfig Profil-Konfiguration
      */
     public async saveProfile(profileName: string, profileConfig: ProfileConfig): Promise<boolean> {
         try {
-            // Speichern im Map
             this.profilesMap.set(profileName, profileConfig);
             
-            // Speichern in Datei
             const profilePath = path.join(this.profilesDir, `${profileName}.json`);
             fs.writeFileSync(profilePath, JSON.stringify(profileConfig, null, 2), 'utf8');
             
@@ -192,36 +186,33 @@ export class ProfileManager {
     }
 
     /**
-     * Löscht ein benutzerdefiniertes Profil
-     * @param profileName Name des Profils
+     * L?scht ein benutzerdefiniertes Profil
      */
     public async deleteProfile(profileName: string): Promise<boolean> {
-        // Standard-Profile können nicht gelöscht werden
+        // Standard-Profile k?nnen nicht gel?scht werden
         if (['standard', 'performance', 'fast'].includes(profileName)) {
-            logger.error(`Standard-Profil ${profileName} kann nicht gelöscht werden`);
+            logger.error(`Standard-Profil ${profileName} kann nicht gel?scht werden`);
             return false;
         }
         
         try {
-            // Aus Map entfernen
             this.profilesMap.delete(profileName);
             
-            // Datei löschen
             const profilePath = path.join(this.profilesDir, `${profileName}.json`);
             if (fs.existsSync(profilePath)) {
                 fs.unlinkSync(profilePath);
             }
             
-            // Wenn das gelöschte Profil das aktuelle war, wechsle zu standard
             if (this.currentProfile === profileName) {
                 await this.setCurrentProfile('standard');
             }
             
-            logger.info(`Profil ${profileName} gelöscht`);
+            logger.info(`Profil ${profileName} gel?scht`);
             return true;
         } catch (error) {
-            logger.error(`Fehler beim Löschen des Profils ${profileName}:`, error);
+            logger.error(`Fehler beim L?schen des Profils ${profileName}:`, error);
             return false;
         }
     }
 }
+
