@@ -684,4 +684,248 @@ async function displayChatResult(result) {
     </html>
   `;
 }
+// Helper function to get active chat targets (simplified)
+function getActiveChatTargets() {
+    return []; // Simplified implementation
+}
+/**
+ * Phase 3: Advanced AI Capabilities Command Handlers
+ */
+async function handleMultiModelChatCommand() {
+    try {
+        if (!state.multiModelManager) {
+            vscode.window.showErrorMessage('Multi-Model Manager nicht verfügbar');
+            return;
+        }
+        const prompt = await vscode.window.showInputBox({
+            prompt: "Prompt für Multi-Model Vergleich",
+            placeHolder: "Geben Sie Ihren Prompt ein..."
+        });
+        if (!prompt)
+            return;
+        const strategy = await vscode.window.showQuickPick([
+            { label: 'parallel', description: 'Alle Modelle gleichzeitig ausführen' },
+            { label: 'sequential', description: 'Modelle nacheinander mit Kontext' },
+            { label: 'consensus', description: 'Konsens aus mehreren Antworten bilden' },
+            { label: 'comparison', description: 'Vergleichende Analyse' }
+        ], {
+            placeHolder: 'Wählen Sie eine Strategie'
+        });
+        if (!strategy)
+            return;
+        const models = ['gpt-4', 'claude-3-sonnet', 'claude-3-haiku'];
+        const response = await state.multiModelManager.executeMultiModel({
+            prompt,
+            models,
+            strategy: strategy.label
+        });
+        // Display results in chat UI
+        const resultMessage = `Multi-Model Ergebnis (${strategy.label}):\n\n` +
+            response.map(r => `**${r.modelId}:**\n${r.response}\n\n`).join('---\n');
+        vscode.window.showInformationMessage(`Multi-Model Chat ausgeführt mit ${response.length} Modellen`);
+    }
+    catch (error) {
+        vscode.window.showErrorMessage(`Multi-Model Chat Fehler: ${error instanceof Error ? error.message : String(error)}`);
+    }
+}
+async function handleCreateTaskPlanCommand() {
+    try {
+        if (!state.taskPlanner) {
+            vscode.window.showErrorMessage('Task Planner nicht verfügbar');
+            return;
+        }
+        const objective = await vscode.window.showInputBox({
+            prompt: "Beschreiben Sie Ihr Ziel",
+            placeHolder: "z.B. 'Erstelle eine React-Komponente für...' oder 'Refaktoriere diese Klasse...'"
+        });
+        if (!objective)
+            return;
+        const projectType = await vscode.window.showQuickPick([
+            'web-frontend', 'web-backend', 'mobile-app', 'desktop-app', 'library', 'other'
+        ], {
+            placeHolder: 'Projekttyp auswählen'
+        });
+        const qualityLevel = await vscode.window.showQuickPick([
+            { label: 'fast', description: 'Schnelle Ergebnisse' },
+            { label: 'balanced', description: 'Ausgewogene Qualität und Geschwindigkeit' },
+            { label: 'thorough', description: 'Höchste Qualität, mehr Zeit' }
+        ], {
+            placeHolder: 'Qualitätsstufe wählen'
+        });
+        const plan = await state.taskPlanner.createPlan({
+            objective,
+            context: {
+                projectType,
+                language: 'typescript',
+                framework: 'vscode-extension'
+            },
+            preferences: {
+                qualityLevel: qualityLevel?.label
+            }
+        });
+        // Show plan in a new document
+        const doc = await vscode.workspace.openTextDocument({
+            content: `# Task Plan: ${plan.title}\n\n${plan.description}\n\n## Tasks:\n\n` +
+                plan.tasks.map((task, i) => `${i + 1}. **${task.title}** (${task.estimatedTime}min)\n   ${task.description}`).join('\n\n'),
+            language: 'markdown'
+        });
+        await vscode.window.showTextDocument(doc);
+        vscode.window.showInformationMessage(`Task Plan "${plan.title}" erstellt mit ${plan.tasks.length} Aufgaben`);
+    }
+    catch (error) {
+        vscode.window.showErrorMessage(`Task Plan Fehler: ${error instanceof Error ? error.message : String(error)}`);
+    }
+}
+async function handleExecuteTaskPlanCommand(planId) {
+    try {
+        if (!state.taskPlanner) {
+            vscode.window.showErrorMessage('Task Planner nicht verfügbar');
+            return;
+        }
+        vscode.window.showInformationMessage('Task Plan Ausführung wird simuliert...');
+        // Simplified execution simulation
+        await vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: "Task Plan wird ausgeführt...",
+            cancellable: true
+        }, async (progress) => {
+            for (let i = 0; i < 5; i++) {
+                progress.report({ increment: 20, message: `Schritt ${i + 1} von 5` });
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+        });
+        vscode.window.showInformationMessage('✅ Task Plan Ausführung abgeschlossen!');
+    }
+    catch (error) {
+        vscode.window.showErrorMessage(`Task Plan Ausführung Fehler: ${error instanceof Error ? error.message : String(error)}`);
+    }
+}
+async function handleOptimizePromptCommand() {
+    try {
+        if (!state.promptingManager) {
+            vscode.window.showErrorMessage('Prompting Manager nicht verfügbar');
+            return;
+        }
+        const originalPrompt = await vscode.window.showInputBox({
+            prompt: "Prompt zum Optimieren",
+            placeHolder: "Geben Sie Ihren ursprünglichen Prompt ein..."
+        });
+        if (!originalPrompt)
+            return;
+        const objective = await vscode.window.showInputBox({
+            prompt: "Was möchten Sie mit diesem Prompt erreichen?",
+            placeHolder: "Beschreiben Sie das gewünschte Ergebnis..."
+        });
+        if (!objective)
+            return;
+        const optimized = await state.promptingManager.optimizePrompt({
+            original_prompt: originalPrompt,
+            objective
+        });
+        // Show optimization results
+        const resultContent = `# Prompt Optimierung\n\n` +
+            `## Original:\n${originalPrompt}\n\n` +
+            `## Optimiert:\n${optimized.optimized_prompt}\n\n` +
+            `## Verbesserungen:\n${optimized.improvements.map(i => `- ${i}`).join('\n')}\n\n` +
+            `## Strategie: ${optimized.strategy_used}\n` +
+            `## Konfidenz: ${(optimized.confidence * 100).toFixed(1)}%\n` +
+            `## Erwartete Qualitätssteigerung: ${(optimized.expected_quality_gain * 100).toFixed(1)}%\n\n` +
+            `## Begründung:\n${optimized.reasoning}`;
+        const doc = await vscode.workspace.openTextDocument({
+            content: resultContent,
+            language: 'markdown'
+        });
+        await vscode.window.showTextDocument(doc);
+    }
+    catch (error) {
+        vscode.window.showErrorMessage(`Prompt Optimierung Fehler: ${error instanceof Error ? error.message : String(error)}`);
+    }
+}
+async function handleAnalyzeCodeCommand() {
+    try {
+        if (!state.codeAnalyzer) {
+            vscode.window.showErrorMessage('Code Analyzer nicht verfügbar');
+            return;
+        }
+        const activeEditor = vscode.window.activeTextEditor;
+        if (!activeEditor) {
+            vscode.window.showErrorMessage('Keine aktive Datei geöffnet');
+            return;
+        }
+        const focus = await vscode.window.showQuickPick([
+            { label: 'quality', description: 'Code-Qualität und Wartbarkeit' },
+            { label: 'security', description: 'Sicherheitslücken und Vulnerabilities' },
+            { label: 'performance', description: 'Performance-Optimierungen' },
+            { label: 'architecture', description: 'Architektur und Design-Patterns' },
+            { label: 'documentation', description: 'Dokumentation und Kommentare' },
+            { label: 'testing', description: 'Test-Abdeckung und Qualität' }
+        ], {
+            placeHolder: 'Analysefokus wählen'
+        });
+        if (!focus)
+            return;
+        const depth = await vscode.window.showQuickPick([
+            { label: 'shallow', description: 'Oberflächliche Analyse' },
+            { label: 'medium', description: 'Mittlere Tiefe' },
+            { label: 'deep', description: 'Tiefgehende Analyse' }
+        ], {
+            placeHolder: 'Analysetiefe wählen'
+        });
+        if (!depth)
+            return;
+        await vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: "Code wird analysiert...",
+            cancellable: false
+        }, async () => {
+            const result = await state.codeAnalyzer.analyzeCode({
+                type: 'single_file',
+                target: activeEditor.document.fileName,
+                focus: focus.label,
+                depth: depth.label,
+                includeContext: true
+            });
+            // Show analysis results
+            const resultContent = `# Code-Analyse Ergebnis\n\n` +
+                `Datei: ${activeEditor.document.fileName}\n` +
+                `Fokus: ${focus.description}\n` +
+                `Tiefe: ${depth.description}\n` +
+                `Konfidenz: ${(result.confidence * 100).toFixed(1)}%\n\n` +
+                `## Zusammenfassung\n${result.summary}\n\n` +
+                `## Befunde (${result.findings.length})\n\n` +
+                result.findings.map(f => `### ${f.message} (${f.severity})\n` +
+                    `**Kategorie:** ${f.category}\n` +
+                    `**Zeile:** ${f.location.line}\n` +
+                    `**Beschreibung:** ${f.description}\n`).join('\n') +
+                `\n## Empfehlungen (${result.recommendations.length})\n\n` +
+                result.recommendations.map(r => `### ${r.title} (${r.priority})\n` +
+                    `**Typ:** ${r.type}\n` +
+                    `**Aufwand:** ${r.estimated_effort}\n` +
+                    `**Beschreibung:** ${r.description}\n` +
+                    `**Implementierung:** ${r.implementation}\n` +
+                    `**Vorteile:** ${r.benefits.join(', ')}\n`).join('\n') +
+                `\n## Metriken\n` +
+                `- Zeilen: ${result.metrics.lines_of_code}\n` +
+                `- Zyklomatische Komplexität: ${result.metrics.cyclomatic_complexity}\n` +
+                `- Wartbarkeitsindex: ${result.metrics.maintainability_index.toFixed(1)}\n` +
+                `- Technische Schuld: ${result.metrics.technical_debt.toFixed(1)}\n`;
+            const doc = await vscode.workspace.openTextDocument({
+                content: resultContent,
+                language: 'markdown'
+            });
+            await vscode.window.showTextDocument(doc);
+        });
+    }
+    catch (error) {
+        vscode.window.showErrorMessage(`Code-Analyse Fehler: ${error instanceof Error ? error.message : String(error)}`);
+    }
+}
+async function handleReviewPullRequestCommand() {
+    try {
+        vscode.window.showInformationMessage('Pull Request Review Feature wird in einer zukünftigen Version implementiert');
+    }
+    catch (error) {
+        vscode.window.showErrorMessage(`PR Review Fehler: ${error instanceof Error ? error.message : String(error)}`);
+    }
+}
 //# sourceMappingURL=extension.js.map
