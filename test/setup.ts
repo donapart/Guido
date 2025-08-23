@@ -4,6 +4,7 @@
  */
 
 import * as vscode from 'vscode';
+import { jest, beforeAll, afterAll, beforeEach } from '@jest/globals';
 
 // Mock VS Code API
 const mockVSCode = {
@@ -45,8 +46,8 @@ const mockVSCode = {
 };
 
 // Global mocks
-global.fetch = jest.fn();
-global.WebSocket = jest.fn();
+global.fetch = jest.fn() as any;
+global.WebSocket = jest.fn() as any;
 
 // Mock axios
 jest.mock('axios', () => ({
@@ -69,7 +70,7 @@ global.SpeechRecognition = jest.fn(() => ({
   abort: jest.fn(),
   addEventListener: jest.fn(),
   removeEventListener: jest.fn()
-}));
+})) as any;
 
 global.webkitSpeechRecognition = global.SpeechRecognition;
 
