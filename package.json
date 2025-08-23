@@ -308,12 +308,15 @@
     "preset": "ts-jest",
     "testEnvironment": "node",
     "roots": [
-      "<rootDir>/src",
       "<rootDir>/test"
     ],
     "testMatch": [
       "**/__tests__/**/*.ts",
       "**/*.(test|spec).ts"
+    ],
+    "testPathIgnorePatterns": [
+      "<rootDir>/test/integration/",
+      "<rootDir>/test/providers/"
     ],
     "collectCoverageFrom": [
       "src/**/*.ts",

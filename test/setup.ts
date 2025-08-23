@@ -3,10 +3,10 @@
  * Configures global test environment and mocks
  */
 
-import * as vscode from 'vscode';
+import { jest, beforeAll, afterAll, beforeEach } from '@jest/globals';
 
 // Mock VS Code API
-const mockVSCode = {
+export const mockVSCode = {
   window: {
     showInformationMessage: jest.fn(),
     showErrorMessage: jest.fn(),
@@ -21,7 +21,8 @@ const mockVSCode = {
       update: jest.fn(),
       has: jest.fn()
     })),
-    workspaceFolders: []
+    workspaceFolders: [],
+    getWorkspaceFolder: jest.fn()
   },
   commands: {
     registerCommand: jest.fn(),
@@ -44,9 +45,11 @@ const mockVSCode = {
   }
 };
 
+jest.mock('vscode', () => mockVSCode, { virtual: true });
+
 // Global mocks
-global.fetch = jest.fn();
-global.WebSocket = jest.fn();
+global.fetch = jest.fn() as any;
+global.WebSocket = jest.fn() as any;
 
 // Mock axios
 jest.mock('axios', () => ({
@@ -69,7 +72,7 @@ global.SpeechRecognition = jest.fn(() => ({
   abort: jest.fn(),
   addEventListener: jest.fn(),
   removeEventListener: jest.fn()
-}));
+})) as any;
 
 global.webkitSpeechRecognition = global.SpeechRecognition;
 
@@ -99,4 +102,4 @@ beforeEach(() => {
 });
 
 // Export mock for use in tests
-export { mockVSCode };
+export default mockVSCode;
