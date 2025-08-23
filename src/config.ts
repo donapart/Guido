@@ -518,30 +518,25 @@ export async function loadConfiguration(): Promise<ProfileConfig> {
         return config.profiles[config.activeProfile];
       } catch (configError) {
         console.log('[Guido] Creating default config in extension folder');
-        try {
-          // Erstelle ein minimales Default-Konfigurationsobjekt ohne auf Datei zuzugreifen
-          return {
-            mode: "auto",
-            providers: [
-              {
-                id: "openai",
-                kind: "openai-compat",
-                baseUrl: "https://api.openai.com/v1",
-                models: [{name: "gpt-4"}, {name: "gpt-3.5-turbo"}],
-              }
-            ],
-            routing: {
-              rules: [],
-              default: {
-                prefer: ["openai:gpt-4"],
-                target: "chat"
-              }
+        // Erstelle ein minimales Default-Konfigurationsobjekt ohne auf Datei zuzugreifen
+        return {
+          mode: "auto",
+          providers: [
+            {
+              id: "openai",
+              kind: "openai-compat",
+              baseUrl: "https://api.openai.com/v1",
+              models: [{ name: "gpt-4" }, { name: "gpt-3.5-turbo" }],
             }
-          };
-        } catch (innerError) {
-          console.error('[Guido] Failed to create default config:', innerError);
-          throw innerError;
-        }
+          ],
+          routing: {
+            rules: [],
+            default: {
+              prefer: ["openai:gpt-4"],
+              target: "chat"
+            }
+          }
+        };
       }
     }
     throw new ConfigError("No workspace folder found");
