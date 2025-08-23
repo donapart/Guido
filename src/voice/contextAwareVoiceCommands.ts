@@ -107,12 +107,12 @@ export class ContextAwareVoiceCommands {
       },
       
       // Search commands
-      {
-        pattern: /guido,?\s*(suche?|search|find)\s*(nach|for)?\s*[\"'](.*?)[\"']/i,
-        description: "Sucht nach Text in der aktuellen Datei",
-        requiresSelection: false,
-        handler: this.handleSearchInFile.bind(this)
-      },
+        {
+          pattern: /guido,?\s*(suche?|search|find)\s*(nach|for)?\s*["'](.*?)["']/i,
+          description: "Sucht nach Text in der aktuellen Datei",
+          requiresSelection: false,
+          handler: this.handleSearchInFile.bind(this)
+        },
       
       // File operations
       {

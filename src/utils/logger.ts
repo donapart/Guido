@@ -16,9 +16,11 @@ class GuidoLogger {
       || path.join(context.extensionUri.fsPath, '.storage');
 
     this.logDir = path.join(storagePath, 'logs');
-    try {
-      fs.mkdirSync(this.logDir, { recursive: true });
-    } catch {}
+      try {
+        fs.mkdirSync(this.logDir, { recursive: true });
+      } catch (err) {
+        // ignore errors creating log directory
+      }
 
     this.output = vscode.window.createOutputChannel('Guido Model Router');
 
@@ -51,10 +53,16 @@ class GuidoLogger {
     try {
       if (!fs.existsSync(this.logDir)) return;
       const files = fs.readdirSync(this.logDir);
-      for (const f of files) {
-        try { fs.unlinkSync(path.join(this.logDir, f)); } catch {}
+        for (const f of files) {
+          try {
+            fs.unlinkSync(path.join(this.logDir, f));
+          } catch (err) {
+            // ignore errors deleting log file
+          }
+        }
+      } catch (err) {
+        // ignore errors reading log directory
       }
-    } catch {}
   }
 
   debug(message: string, data?: unknown) { this.write('debug', message, data); }
@@ -63,23 +71,25 @@ class GuidoLogger {
   error(message: string, data?: unknown) { this.write('error', message, data); }
 
   private write(level: LogLevel, message: string, data?: unknown) {
-    try {
-      const record = {
-        ts: new Date().toISOString(),
-        level,
-        message,
-        data
-      };
+      try {
+        const record = {
+          ts: new Date().toISOString(),
+          level,
+          message,
+          data
+        };
 
-      const line = JSON.stringify(record) + '\n';
-      const file = this.getLatestLogFile();
-      fs.appendFileSync(file, line, { encoding: 'utf8' });
+        const line = JSON.stringify(record) + '\n';
+        const file = this.getLatestLogFile();
+        fs.appendFileSync(file, line, { encoding: 'utf8' });
 
-      if (this.output) {
-        const prefix = level.toUpperCase().padEnd(5);
-        this.output.appendLine(`${prefix} ${message}${data ? ' ' + this.safeString(data) : ''}`);
+        if (this.output) {
+          const prefix = level.toUpperCase().padEnd(5);
+          this.output.appendLine(`${prefix} ${message}${data ? ' ' + this.safeString(data) : ''}`);
+        }
+      } catch (err) {
+        // ignore logging errors
       }
-    } catch {}
   }
 
   private today(): string {
