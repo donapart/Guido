@@ -2,5 +2,9 @@
     "i18n-ally.localesPaths": [
         "F:/__Backup_D_prjkt/Guido/local"
     ],
-    "todo-tree.tree.scanMode": "workspace only"
+    "todo-tree.tree.scanMode": "workspace only",
+    "modelRouter.enabled": true,
+    "modelRouter.voice.enabled": true,
+    "modelRouter.experimental.enabled": true,
+    "modelRouter.defaultModel": "gpt-4o-mini"
 }

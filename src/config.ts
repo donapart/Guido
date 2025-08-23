@@ -499,8 +499,51 @@ export class ConfigLoader {
 export async function loadConfiguration(): Promise<ProfileConfig> {
   const configLoader = ConfigLoader.getInstance();
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  
+  console.log('[Guido] Loading configuration, workspace root:', workspaceRoot);
 
   if (!workspaceRoot) {
+    console.error('[Guido] No workspace folder found, using extension folder');
+    // Try extension folder as fallback
+    const extContext = (global as any).guidoExtensionContext;
+    if (extContext) {
+      const extensionPath = extContext.extensionPath;
+      console.log('[Guido] Using extension path:', extensionPath);
+      const configPath = path.join(extensionPath, "router.config.yaml");
+      
+      try {
+        console.log('[Guido] Trying to load config from:', configPath);
+        const config = configLoader.loadConfig(configPath);
+        console.log('[Guido] Config loaded successfully from extension folder');
+        return config.profiles[config.activeProfile];
+      } catch (configError) {
+        console.log('[Guido] Creating default config in extension folder');
+        try {
+          // Erstelle ein minimales Default-Konfigurationsobjekt ohne auf Datei zuzugreifen
+          return {
+            mode: "auto",
+            providers: [
+              {
+                id: "openai",
+                kind: "openai-compat",
+                baseUrl: "https://api.openai.com/v1",
+                models: [{name: "gpt-4"}, {name: "gpt-3.5-turbo"}],
+              }
+            ],
+            routing: {
+              rules: [],
+              default: {
+                prefer: ["openai:gpt-4"],
+                target: "chat"
+              }
+            }
+          };
+        } catch (innerError) {
+          console.error('[Guido] Failed to create default config:', innerError);
+          throw innerError;
+        }
+      }
+    }
     throw new ConfigError("No workspace folder found");
   }
 

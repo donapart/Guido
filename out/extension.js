@@ -64,10 +64,22 @@ let extensionContext;
 let state;
 async function activate(context) {
     extensionContext = context;
+    // Store context globally for access in config.ts
+    global.guidoExtensionContext = context;
     try {
         // Initialize logger early
         logger_1.logger.init(context);
-        logger_1.logger.info("Extension activate called");
+        logger_1.logger.info("Extension activate called", { version: '0.2.1', time: new Date().toISOString() });
+        console.log('[Guido] Extension activate called - v0.2.1');
+        // Debug-Meldung, um die Aktivierung zu bestätigen
+        vscode.window.showInformationMessage('Guido wird gestartet...');
+        // Register global error handler
+        process.on('uncaughtException', (error) => {
+            logger_1.logger.error('uncaught_exception', { message: error.message, stack: error.stack });
+            console.error('[Guido] Uncaught exception:', error);
+            // Zeige Fehler direkt an
+            vscode.window.showErrorMessage(`Guido Fehler: ${error.message}`);
+        });
         await initializeExtension();
         // Register commands
         registerCommands(context);
@@ -84,7 +96,8 @@ async function activate(context) {
         // Initialize Phase 3: Advanced AI Capabilities
         await initializePhase3Features();
         vscode.window.showInformationMessage("Guido Model Router Extension aktiviert! 🎤✨");
-        logger_1.logger.info("Extension activated successfully");
+        logger_1.logger.info("Extension activated successfully", { workspaceFolder: vscode.workspace.workspaceFolders?.[0]?.uri.toString() });
+        console.log('[Guido] Extension activated successfully');
     }
     catch (error) {
         const message = `Fehler beim Aktivieren der Extension: ${error instanceof Error ? error.message : String(error)}`;
@@ -105,6 +118,26 @@ function deactivate() {
 async function initializeExtension() {
     // Load configuration
     const config = await (0, config_1.loadConfiguration)();
+    logger_1.logger.info('Configuration loaded', { providerCount: config.providers?.length || 0 });
+    try {
+        // Write config file if it doesn't exist (for first start)
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (workspaceRoot) {
+            const configPath = vscode.Uri.joinPath(vscode.Uri.file(workspaceRoot), 'router.config.yaml');
+            try {
+                await vscode.workspace.fs.stat(configPath);
+                logger_1.logger.info('Config file exists', { path: configPath.toString() });
+            }
+            catch (e) {
+                logger_1.logger.info('Creating default config file', { path: configPath.toString() });
+                const defaultConfig = await vscode.workspace.fs.readFile(vscode.Uri.joinPath(vscode.Uri.file(extensionContext.extensionPath), 'router.config.yaml'));
+                await vscode.workspace.fs.writeFile(configPath, defaultConfig);
+            }
+        }
+    }
+    catch (e) {
+        logger_1.logger.warn('Failed to setup config file', { error: e instanceof Error ? e.message : String(e) });
+    }
     // Initialize secret manager
     const secretManager = new secret_1.VSCodeSecretManager(extensionContext);
     // Initialize providers
@@ -132,6 +165,7 @@ async function initializeExtension() {
     await initializeEnterpriseProviders(providers);
     // Initialize router
     const router = new router_1.ModelRouter(config, providers);
+    logger_1.logger.info('Core components initialized', { providersCount: providers.size });
     state = {
         router,
         providers,

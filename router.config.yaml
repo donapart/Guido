@@ -1,144 +1,43 @@
-# Guido Model Router Konfiguration
-
-# Allgemeine Einstellungen
-enabled: true
-defaultModel: "gpt-4-turbo"
-defaultLanguage: "de"
-
-# Voice Control
-voice:
-  enabled: true
-  wakeWord: "Guido"
-  language: "de-DE"
-  timeout: 10000  # 10 Sekunden
-  beep:
-    enabled: true
-    volume: 0.3
-    frequency: 440
-    duration: 200
-  tts:
-    enabled: true
-    voice: "de-DE-Standard-A"
-    rate: 1.0
-    pitch: 1.0
-    volume: 0.8
-  confirmation:
-    required: true
-    timeout: 5000  # 5 Sekunden
-  permissions:
-    microphone: true
-    notifications: true
-    storage: true
-
-# Provider-Konfiguration
-providers:
-  - id: "openai"
-    kind: "openai-compat"
-    baseUrl: "https://api.openai.com/v1"
-    models: ["gpt-4-turbo", "gpt-3.5-turbo"]
-    model: "gpt-4-turbo"
-    maxTokens: 4096
-    temperature: 0.7
-
-  - id: "anthropic"
-    kind: "custom"
-    baseUrl: "https://api.anthropic.com"
-    models: ["claude-3-opus", "claude-3-sonnet"]
-    model: "claude-3-sonnet"
-    maxTokens: 4096
-    temperature: 0.7
-
-  - id: "ollama"
-    kind: "ollama"
-    baseUrl: "http://localhost:11434"
-    models: ["llama2", "codellama", "mistral"]
-    model: "codellama"
-    maxTokens: 4096
-    temperature: 0.7
-
-# Routing-Profile
+version: 1
+activeProfile: default
 profiles:
   default:
-    mode: "auto"
-    priority: ["quality", "speed", "cost"]
-    filters:
-      minTokens: 0
-      maxTokens: 4096
-      minConfidence: 0.7
-
-  speed:
-    mode: "speed"
-    priority: ["speed", "cost", "quality"]
-    filters:
-      maxLatency: 2000
-      minConfidence: 0.6
-
-  quality:
-    mode: "quality"
-    priority: ["quality", "cost", "speed"]
-    filters:
-      minConfidence: 0.8
-      preferredModels: ["gpt-4-turbo", "claude-3-opus"]
-
-  cheap:
-    mode: "cheap"
-    priority: ["cost", "speed", "quality"]
-    filters:
-      maxCostPerToken: 0.00001
-      minConfidence: 0.6
-
-  local:
-    mode: "local-only"
-    priority: ["speed", "quality"]
-    providers: ["ollama"]
-    filters:
-      minConfidence: 0.6
-
-  private:
-    mode: "privacy-strict"
-    priority: ["privacy", "quality"]
-    providers: ["ollama"]
-    filters:
-      requireLocalProcessing: true
-      minConfidence: 0.7
-
-# Experimentelle Features
-experimental:
-  enabled: true
-  features:
-    emotionDetection: true
-    contextAwareness: true
-    adaptiveInterface: true
-    multilingual: true
-    personalityAdaptation: true
-    intentRecognition: true
-    performanceMetrics: true
-
-  voice:
-    enhancedWakeWord: true
-    emotionAnalysis: true
-    noiseReduction: true
-    continuousLearning: true
-    adaptiveThreshold: true
-
-  routing:
-    dynamicSelection: true
-    performanceTracking: true
-    costOptimization: true
-    loadBalancing: true
-    failover: true
-
-  ui:
-    adaptiveTheme: true
-    gestureControl: true
-    keyboardShortcuts: true
-    customizableLayout: true
-    accessibilityFeatures: true
-
-# Logging
-logging:
-  level: "info"
-  file: true
-  console: true
-  performance: true
-  metrics: true
+    mode: auto
+    budget:
+      dailyUSD: 5
+      hardStop: true
+      warningThreshold: 80
+    privacy:
+      redactPaths:
+        - "**/secrets/**"
+        - "**/.env*"
+      stripFileContentOverKB: 256
+      allowExternal: true
+    providers:
+      - id: openai
+        kind: openai-compat
+        baseUrl: https://api.openai.com/v1
+        apiKeyRef: OPENAI_API_KEY
+        models:
+          - name: gpt-4o-mini
+            context: 128000
+            caps:
+              - cheap
+              - tools
+              - json
+            price:
+              inputPerMTok: 0.15
+              outputPerMTok: 0.6
+              cachedInputPerMTok: 0.08
+    routing:
+      rules:
+        - id: default-rule
+          if: {}
+          then:
+            prefer:
+              - openai:gpt-4o-mini
+            target: chat
+      default:
+        prefer:
+          - openai:gpt-4o-mini
+        target: chat
