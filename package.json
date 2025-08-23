@@ -117,6 +117,16 @@
         "command": "modelRouter.experimental.testFeatures",
         "title": "🧪 Experimental: Test All Features",
         "category": "Model Router Experimental"
+      },
+      {
+        "command": "modelRouter.showLogs",
+        "title": "Model Router: Show Logs",
+        "category": "Model Router"
+      },
+      {
+        "command": "modelRouter.clearLogs",
+        "title": "Model Router: Clear Logs",
+        "category": "Model Router"
       }
     ],
     "views": {

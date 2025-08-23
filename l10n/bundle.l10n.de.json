@@ -1,23 +1,62 @@
 {
-  "displayName": "Model Router (VSCode/Cursor)",
-  "description": "Automatische KI-Modell-Auswahl mit Routing-Engine, Kostenmanagement und Guido Sprachsteuerung",
-  
-  "command.chat.title": "Model Router: Chat",
-  "command.routeOnce.title": "Model Router: Prompt einmal routen", 
-  "command.setApiKey.title": "Model Router: API-Schlüssel setzen (Provider)",
-  "command.switchMode.title": "Model Router: Modus wechseln",
-  "command.openConfig.title": "Model Router: Konfiguration öffnen",
-  "command.showCosts.title": "Model Router: Kosten anzeigen",
-  "command.testConnection.title": "Model Router: Provider-Verbindung testen",
-  "command.startVoiceControl.title": "Model Router: Sprachsteuerung starten (Guido)",
-  "command.stopVoiceControl.title": "Model Router: Sprachsteuerung stoppen",
-  "command.toggleVoiceControl.title": "Model Router: Sprachsteuerung umschalten",
-  "command.voiceSettings.title": "Model Router: Sprach-Einstellungen",
-  "command.voicePermissions.title": "Model Router: Sprach-Berechtigungen & Datenschutz",
-  
-  "config.configPath.description": "Pfad zur Router-Konfiguration (YAML).",
-  "config.mode.description": "Aktiver Routing-Modus",
-  "config.enablePromptClassifier.description": "Erweiterte Prompt-Klassifikation aktivieren",
-  
-  "view.guidoVoiceControl.name": "🎤 Guido Sprachsteuerung"
+  "extension.activate.success": "Guido Model Router Extension aktiviert! 🎤✨",
+  "extension.activate.error": "Fehler beim Aktivieren der Extension: {0}",
+  "extension.deactivate": "Guido Model Router Extension deaktiviert.",
+
+  "voice.start": "🎤 Guido hört zu... Sagen Sie \"Guido\"!",
+  "voice.stop": "🔇 Sprachsteuerung gestoppt.",
+  "voice.toggle": "🔄 Sprachsteuerung umgeschaltet.",
+  "voice.error.init": "Voice Control ist nicht initialisiert.",
+  "voice.error.start": "Fehler beim Starten der Sprachsteuerung: {0}",
+  "voice.error.stop": "Fehler beim Stoppen der Sprachsteuerung: {0}",
+
+  "chat.prompt": "Geben Sie Ihre Nachricht ein:",
+  "chat.placeholder": "z.B. \"Erkläre mir TypeScript\"",
+  "chat.error": "Fehler: {0}",
+
+  "cost.prompt": "Geben Sie den Text ein, für den Sie die Kosten schätzen möchten:",
+  "cost.estimate": "Geschätzte Kosten: {0}€ ({1}/{2})",
+  "cost.error": "Fehler bei der Kostenberechnung: {0}",
+
+  "experimental.emotion.prompt": "Geben Sie Text für Emotion-Analyse ein:",
+  "experimental.emotion.placeholder": "z.B. \"Ich bin frustriert mit diesem Code\"",
+  "experimental.emotion.result": "🧠 Emotion: {0} (Confidence: {1}%)",
+  "experimental.emotion.error": "Emotion-Analyse fehlgeschlagen: {0}",
+
+  "experimental.context.prompt": "Geben Sie Text für Kontext-Erweiterung ein:",
+  "experimental.context.placeholder": "z.B. \"Erkläre mir diese Funktion\"",
+  "experimental.context.result": "🔍 Erweiterter Text: {0}",
+  "experimental.context.error": "Kontext-Erweiterung fehlgeschlagen: {0}",
+
+  "experimental.routing.prompt": "Geben Sie einen Prompt für adaptives Routing ein:",
+  "experimental.routing.placeholder": "z.B. \"Optimiere diesen Code für Performance\"",
+  "experimental.routing.result": "🎯 Routing-Entscheidung: {0} ({1})",
+  "experimental.routing.error": "Adaptives Routing fehlgeschlagen: {0}",
+
+  "experimental.intent.prompt": "Geben Sie Text für Intent-Erkennung ein:",
+  "experimental.intent.placeholder": "z.B. \"Schreibe eine Funktion für Array-Sortierung\"",
+  "experimental.intent.result": "🎯 Intent: {0} (Confidence: {1}%)",
+  "experimental.intent.error": "Intent-Erkennung fehlgeschlagen: {0}",
+
+  "experimental.personality.result": "🎭 Angepasste Persönlichkeit: {0} (Formalität: {1})",
+  "experimental.personality.error": "Persönlichkeitsanpassung fehlgeschlagen: {0}",
+
+  "experimental.multilingual.prompt": "Geben Sie Text für mehrsprachige Verarbeitung ein:",
+  "experimental.multilingual.placeholder": "z.B. \"Help me with this code\" oder \"Aide-moi avec ce code\"",
+  "experimental.multilingual.result": "🌍 Sprache: {0} → {1}",
+  "experimental.multilingual.error": "Mehrsprachige Verarbeitung fehlgeschlagen: {0}",
+
+  "experimental.performance.result": "📊 Performance-Metriken:\n\n🎯 Modell: {0}\n📈 Performance Score: {1}%\n💰 Geschätzte Kosten: {2}€\n🎯 Confidence: {3}%",
+  "experimental.performance.error": "Performance-Metriken fehlgeschlagen: {0}",
+
+  "experimental.ui.success": "🧪 Experimentelle UI geöffnet!",
+  "experimental.ui.error": "Experimentelle UI fehlgeschlagen: {0}",
+
+  "experimental.test.start": "🧪 Starte experimentelle Feature-Tests...",
+  "experimental.test.complete": "✅ Experimentelle Feature-Tests abgeschlossen!",
+  "experimental.test.error": "Feature-Tests fehlgeschlagen: {0}",
+
+  "logs.error.open": "Konnte Logdatei nicht öffnen",
+  "logs.error.clear": "Konnte Logs nicht löschen",
+  "logs.cleared": "Guido Logs gelöscht"
 }

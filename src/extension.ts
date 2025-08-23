@@ -3,26 +3,30 @@
  */
 
 import * as vscode from 'vscode';
-import { ModelRouter } from './router';
-import { loadConfiguration, ProfileConfig } from './config';
-import { VSCodeSecretManager } from './secret';
-import { OpenAICompatProvider } from './providers/openaiCompat';
-import { OllamaProvider } from './providers/ollama';
-import { AnthropicProvider } from './providers/anthropic';
-import { CohereProvider } from './providers/cohere';
-import { OpenRouterProvider } from './providers/openrouter';
-import { HuggingFaceProvider } from './providers/huggingface';
-import { VoiceController } from './voice/voiceController';
-import { ContextAwareVoiceCommands } from './voice/contextAwareVoiceCommands';
-import { AdvancedDashboardUI } from './ui/advancedDashboard';
-import { ExperimentalVoiceFeatures } from './voice/experimental/advancedVoiceFeatures';
-import { ExperimentalRouting } from './router/experimental/advancedRouting';
-import { ExperimentalNLP, UserContextForPersonality } from './voice/experimental/naturalLanguageProcessor';
-import { ExperimentalUI } from './voice/webview/experimentalUI';
-import { MultiModelManager } from './ai/multiModelManager';
-import { AITaskPlanner } from './ai/taskPlanner';
-import { AdvancedPromptingManager } from './ai/promptingManager';
-import { ContextAwareCodeAnalyzer } from './ai/codeAnalyzer';
+import { ContextAwareCodeAnalyzer } from "./ai/codeAnalyzer";
+import { MultiModelManager } from "./ai/multiModelManager";
+import { AdvancedPromptingManager } from "./ai/promptingManager";
+import { AITaskPlanner } from "./ai/taskPlanner";
+import { loadConfiguration, ProfileConfig } from "./config";
+import { AnthropicProvider } from "./providers/anthropic";
+import { CohereProvider } from "./providers/cohere";
+import { HuggingFaceProvider } from "./providers/huggingface";
+import { OllamaProvider } from "./providers/ollama";
+import { OpenAICompatProvider } from "./providers/openaiCompat";
+import { OpenRouterProvider } from "./providers/openrouter";
+import { ModelRouter } from "./router";
+import { ExperimentalRouting } from "./router/experimental/advancedRouting";
+import { VSCodeSecretManager } from "./secret";
+import { AdvancedDashboardUI } from "./ui/advancedDashboard";
+import { logger } from "./utils/logger";
+import { ContextAwareVoiceCommands } from "./voice/contextAwareVoiceCommands";
+import { ExperimentalVoiceFeatures } from "./voice/experimental/advancedVoiceFeatures";
+import {
+  ExperimentalNLP,
+  UserContextForPersonality,
+} from "./voice/experimental/naturalLanguageProcessor";
+import { VoiceController } from "./voice/voiceController";
+import { ExperimentalUI } from "./voice/webview/experimentalUI";
 
 interface ExtensionState {
   router: ModelRouter;
@@ -36,7 +40,7 @@ interface ExtensionState {
   experimentalRouting?: ExperimentalRouting;
   experimentalNLP?: ExperimentalNLP;
   experimentalUI?: ExperimentalUI;
-  
+
   // Phase 3: Advanced AI Capabilities
   multiModelManager?: MultiModelManager;
   taskPlanner?: AITaskPlanner;
@@ -49,32 +53,45 @@ let state: ExtensionState;
 
 export async function activate(context: vscode.ExtensionContext) {
   extensionContext = context;
-  
+
   try {
+    // Initialize logger early
+    logger.init(context);
+    logger.info("Extension activate called");
     await initializeExtension();
-    
+
     // Register commands
     registerCommands(context);
-    
+
     // Initialize voice control if enabled
     if (state.config.voice?.enabled) {
       await initializeVoiceControl();
     }
-    
-    // Initialize Phase 4: Enterprise Extensions  
+
+    // Initialize Phase 4: Enterprise Extensions
     await initializeEnterpriseProviders(state.providers);
     await initializeEnterpriseUI(context);
     await initializeEnterpriseVoiceCommands(context);
-    
+
     // Initialize experimental features
     await initializeExperimentalFeatures();
-    
+
     // Initialize Phase 3: Advanced AI Capabilities
     await initializePhase3Features();
-    
-    vscode.window.showInformationMessage('Guido Model Router Extension aktiviert! 🎤✨');
+
+    vscode.window.showInformationMessage(
+      "Guido Model Router Extension aktiviert! 🎤✨"
+    );
+    logger.info("Extension activated successfully");
   } catch (error) {
-    vscode.window.showErrorMessage(`Fehler beim Aktivieren der Extension: ${error instanceof Error ? error.message : String(error)}`);
+    const message = `Fehler beim Aktivieren der Extension: ${
+      error instanceof Error ? error.message : String(error)
+    }`;
+    logger.error("activate_error", {
+      message,
+      error: error instanceof Error ? error.stack : String(error),
+    });
+    vscode.window.showErrorMessage(message);
   }
 }
 
@@ -83,25 +100,27 @@ export function deactivate() {
   if (state.voiceController) {
     state.voiceController.stopListening();
   }
-  
-  vscode.window.showInformationMessage('Guido Model Router Extension deaktiviert.');
+
+  vscode.window.showInformationMessage(
+    "Guido Model Router Extension deaktiviert."
+  );
 }
 
 async function initializeExtension() {
   // Load configuration
   const config = await loadConfiguration();
-  
+
   // Initialize secret manager
   const secretManager = new VSCodeSecretManager(extensionContext);
-  
+
   // Initialize providers
   const providers = new Map();
   for (const providerConfig of config.providers) {
     try {
       let provider;
-      if (providerConfig.kind === 'openai-compat') {
+      if (providerConfig.kind === "openai-compat") {
         provider = new OpenAICompatProvider(providerConfig as any);
-      } else if (providerConfig.kind === 'ollama') {
+      } else if (providerConfig.kind === "ollama") {
         provider = new OllamaProvider(providerConfig as any);
       } else {
         console.warn(`Unknown provider kind: ${providerConfig.kind}`);
@@ -109,139 +128,137 @@ async function initializeExtension() {
       }
       providers.set(providerConfig.id, provider);
     } catch (error) {
-      console.warn(`Failed to initialize provider ${providerConfig.id}:`, error);
+      console.warn(
+        `Failed to initialize provider ${providerConfig.id}:`,
+        error
+      );
     }
   }
 
   // Initialize enterprise providers (Phase 4)
   await initializeEnterpriseProviders(providers);
-  
+
   // Initialize router
   const router = new ModelRouter(config, providers);
-  
+
   state = {
     router,
     providers,
     config,
-    secretManager
+    secretManager,
   };
 }
 
 async function initializeEnterpriseProviders(providers: Map<string, unknown>) {
-  const workspaceConfig = vscode.workspace.getConfiguration('modelRouter');
-  
+  const workspaceConfig = vscode.workspace.getConfiguration("modelRouter");
+
   try {
     // Initialize Anthropic Provider
-    const anthropicKey = workspaceConfig.get<string>('anthropicApiKey');
+    const anthropicKey = workspaceConfig.get<string>("anthropicApiKey");
     if (anthropicKey && anthropicKey.trim()) {
       try {
         const anthropicProvider = new AnthropicProvider({
-          id: 'anthropic',
-          kind: 'custom',
-          baseUrl: 'https://api.anthropic.com',
+          id: "anthropic",
+          kind: "custom",
+          baseUrl: "https://api.anthropic.com",
           apiKey: anthropicKey,
           models: [
-            'claude-3-5-sonnet-20241022',
-            'claude-3-opus-20240229',
-            'claude-3-haiku-20240307'
+            "claude-3-5-sonnet-20241022",
+            "claude-3-opus-20240229",
+            "claude-3-haiku-20240307",
           ],
-          model: 'claude-3-5-sonnet-20241022',
+          model: "claude-3-5-sonnet-20241022",
           maxTokens: 4096,
-          temperature: 0.7
+          temperature: 0.7,
         });
-        providers.set('anthropic', anthropicProvider);
-        console.log('✅ Anthropic Provider initialized successfully');
+        providers.set("anthropic", anthropicProvider);
+        console.log("✅ Anthropic Provider initialized successfully");
       } catch (error) {
-        console.warn('❌ Anthropic initialization failed:', error);
+        console.warn("❌ Anthropic initialization failed:", error);
       }
     }
-    
+
     // Initialize Cohere Provider
-    const cohereKey = workspaceConfig.get<string>('cohereApiKey');
+    const cohereKey = workspaceConfig.get<string>("cohereApiKey");
     if (cohereKey && cohereKey.trim()) {
       try {
         const cohereProvider = new CohereProvider({
-          id: 'cohere',
-          kind: 'custom',
-          baseUrl: 'https://api.cohere.ai',
+          id: "cohere",
+          kind: "custom",
+          baseUrl: "https://api.cohere.ai",
           apiKey: cohereKey,
-          models: [
-            'command-r-plus',
-            'command-r',
-            'command',
-            'command-nightly'
-          ],
-          model: 'command-r-plus',
+          models: ["command-r-plus", "command-r", "command", "command-nightly"],
+          model: "command-r-plus",
           maxTokens: 4096,
-          temperature: 0.7
+          temperature: 0.7,
         });
-        providers.set('cohere', cohereProvider);
-        console.log('✅ Cohere Provider initialized successfully');
+        providers.set("cohere", cohereProvider);
+        console.log("✅ Cohere Provider initialized successfully");
       } catch (error) {
-        console.warn('❌ Cohere initialization failed:', error);
+        console.warn("❌ Cohere initialization failed:", error);
       }
     }
-    
+
     // Initialize OpenRouter Provider
-    const openrouterKey = workspaceConfig.get<string>('openrouterApiKey');
+    const openrouterKey = workspaceConfig.get<string>("openrouterApiKey");
     if (openrouterKey && openrouterKey.trim()) {
       try {
         const openrouterProvider = new OpenRouterProvider({
-          id: 'openrouter',
-          kind: 'custom',
-          baseUrl: 'https://openrouter.ai/api/v1',
+          id: "openrouter",
+          kind: "custom",
+          baseUrl: "https://openrouter.ai/api/v1",
           apiKey: openrouterKey,
           models: [
-            'openai/gpt-4o',
-            'openai/gpt-4-turbo',
-            'anthropic/claude-3-5-sonnet',
-            'meta-llama/llama-3.1-70b-instruct',
-            'google/gemini-pro',
-            'mistralai/mistral-7b-instruct'
+            "openai/gpt-4o",
+            "openai/gpt-4-turbo",
+            "anthropic/claude-3-5-sonnet",
+            "meta-llama/llama-3.1-70b-instruct",
+            "google/gemini-pro",
+            "mistralai/mistral-7b-instruct",
           ],
-          model: 'openai/gpt-4o',
+          model: "openai/gpt-4o",
           maxTokens: 4096,
-          temperature: 0.7
+          temperature: 0.7,
         });
-        providers.set('openrouter', openrouterProvider);
-        console.log('✅ OpenRouter Provider initialized successfully');
+        providers.set("openrouter", openrouterProvider);
+        console.log("✅ OpenRouter Provider initialized successfully");
       } catch (error) {
-        console.warn('❌ OpenRouter initialization failed:', error);
+        console.warn("❌ OpenRouter initialization failed:", error);
       }
     }
-    
+
     // Initialize Hugging Face Provider
-    const huggingfaceKey = workspaceConfig.get<string>('huggingfaceApiKey');
+    const huggingfaceKey = workspaceConfig.get<string>("huggingfaceApiKey");
     if (huggingfaceKey && huggingfaceKey.trim()) {
       try {
         const huggingfaceProvider = new HuggingFaceProvider({
-          id: 'huggingface',
-          kind: 'custom',
-          baseUrl: 'https://api-inference.huggingface.co',
+          id: "huggingface",
+          kind: "custom",
+          baseUrl: "https://api-inference.huggingface.co",
           apiKey: huggingfaceKey,
           models: [
-            'microsoft/DialoGPT-large',
-            'meta-llama/Llama-2-7b-chat-hf',
-            'mistralai/Mistral-7B-Instruct-v0.1',
-            'google/flan-t5-xl',
-            'Salesforce/codegen-2B-multi'
+            "microsoft/DialoGPT-large",
+            "meta-llama/Llama-2-7b-chat-hf",
+            "mistralai/Mistral-7B-Instruct-v0.1",
+            "google/flan-t5-xl",
+            "Salesforce/codegen-2B-multi",
           ],
-          model: 'microsoft/DialoGPT-large',
+          model: "microsoft/DialoGPT-large",
           maxTokens: 1024,
           temperature: 0.7,
           useCache: true,
-          waitForModel: false
+          waitForModel: false,
         });
-        providers.set('huggingface', huggingfaceProvider);
-        console.log('✅ Hugging Face Provider initialized successfully');
+        providers.set("huggingface", huggingfaceProvider);
+        console.log("✅ Hugging Face Provider initialized successfully");
       } catch (error) {
-        console.warn('❌ Hugging Face initialization failed:', error);
+        console.warn("❌ Hugging Face initialization failed:", error);
       }
     }
-    
+
     console.log(`🚀 Initialized ${providers.size} providers total`);
   } catch (error) {
-    console.warn('Enterprise provider initialization failed:', error);
+    console.warn("Enterprise provider initialization failed:", error);
   }
 }
 
@@ -249,53 +266,67 @@ async function initializeEnterpriseProviders(providers: Map<string, unknown>) {
 async function initializeEnterpriseUI(context: vscode.ExtensionContext) {
   try {
     // Register Advanced Dashboard command
-    const showDashboardCommand = vscode.commands.registerCommand('modelRouter.showAdvancedDashboard', async () => {
-      try {
-        const dashboard = new AdvancedDashboardUI(state.router);
-        dashboard.createDashboard();
-        console.log('✅ Advanced Dashboard opened successfully');
-      } catch (error) {
-        console.error('❌ Failed to open Advanced Dashboard:', error);
-        vscode.window.showErrorMessage('Fehler beim Öffnen des Advanced Dashboard');
+    const showDashboardCommand = vscode.commands.registerCommand(
+      "modelRouter.showAdvancedDashboard",
+      async () => {
+        try {
+          const dashboard = new AdvancedDashboardUI(state.router);
+          dashboard.createDashboard();
+          console.log("✅ Advanced Dashboard opened successfully");
+        } catch (error) {
+          console.error("❌ Failed to open Advanced Dashboard:", error);
+          vscode.window.showErrorMessage(
+            "Fehler beim Öffnen des Advanced Dashboard"
+          );
+        }
       }
-    });
-    
+    );
+
     context.subscriptions.push(showDashboardCommand);
-    console.log('✅ Enterprise UI commands registered');
+    console.log("✅ Enterprise UI commands registered");
   } catch (error) {
-    console.warn('Enterprise UI initialization failed:', error);
+    console.warn("Enterprise UI initialization failed:", error);
   }
 }
 
-// Enterprise Voice Commands initialization  
-async function initializeEnterpriseVoiceCommands(context: vscode.ExtensionContext) {
+// Enterprise Voice Commands initialization
+async function initializeEnterpriseVoiceCommands(
+  context: vscode.ExtensionContext
+) {
   try {
     // Register voice command context command
-    const contextVoiceCommand = vscode.commands.registerCommand('modelRouter.contextVoiceCommand', async () => {
-      try {
-        if (state.contextAwareVoice) {
-          const transcript = await vscode.window.showInputBox({
-            prompt: 'Geben Sie Ihren Sprachbefehl ein:',
-            placeHolder: 'z.B. "Erkläre den ausgewählten Code"'
-          });
-          
-          if (transcript) {
-            await state.contextAwareVoice.processVoiceCommand(transcript);
-            console.log('✅ Context-aware voice command processed');
+    const contextVoiceCommand = vscode.commands.registerCommand(
+      "modelRouter.contextVoiceCommand",
+      async () => {
+        try {
+          if (state.contextAwareVoice) {
+            const transcript = await vscode.window.showInputBox({
+              prompt: "Geben Sie Ihren Sprachbefehl ein:",
+              placeHolder: 'z.B. "Erkläre den ausgewählten Code"',
+            });
+
+            if (transcript) {
+              await state.contextAwareVoice.processVoiceCommand(transcript);
+              console.log("✅ Context-aware voice command processed");
+            }
+          } else {
+            vscode.window.showWarningMessage(
+              "Context-aware voice commands not available"
+            );
           }
-        } else {
-          vscode.window.showWarningMessage('Context-aware voice commands not available');
+        } catch (error) {
+          console.error("❌ Context voice command failed:", error);
+          vscode.window.showErrorMessage(
+            "Fehler bei der kontext-sensitiven Sprachsteuerung"
+          );
         }
-      } catch (error) {
-        console.error('❌ Context voice command failed:', error);
-        vscode.window.showErrorMessage('Fehler bei der kontext-sensitiven Sprachsteuerung');
       }
-    });
-    
+    );
+
     context.subscriptions.push(contextVoiceCommand);
-    console.log('✅ Enterprise Voice Commands initialized');
+    console.log("✅ Enterprise Voice Commands initialized");
   } catch (error) {
-    console.warn('Enterprise Voice Commands initialization failed:', error);
+    console.warn("Enterprise Voice Commands initialization failed:", error);
   }
 }
 
@@ -303,18 +334,29 @@ async function initializeVoiceControl() {
   if (!state.config.voice) {
     return;
   }
-  
+
   try {
-    state.voiceController = new VoiceController(extensionContext, state.config.voice, state.router);
+    state.voiceController = new VoiceController(
+      extensionContext,
+      state.config.voice,
+      state.router
+    );
     await state.voiceController.initialize();
-    
+
     // Initialize Context-Aware Voice Commands (Phase 4)
-    state.contextAwareVoice = new ContextAwareVoiceCommands(state.router, state.voiceController);
-    
-    vscode.window.showInformationMessage('Guido Voice Control mit Context-Aware Commands initialisiert! 🎤✨');
+    state.contextAwareVoice = new ContextAwareVoiceCommands(
+      state.router,
+      state.voiceController
+    );
+
+    vscode.window.showInformationMessage(
+      "Guido Voice Control mit Context-Aware Commands initialisiert! 🎤✨"
+    );
   } catch (error) {
-    console.warn('Voice control initialization failed:', error);
-    vscode.window.showWarningMessage('Voice Control konnte nicht initialisiert werden.');
+    console.warn("Voice control initialization failed:", error);
+    vscode.window.showWarningMessage(
+      "Voice Control konnte nicht initialisiert werden."
+    );
   }
 }
 
@@ -322,17 +364,24 @@ async function initializeExperimentalFeatures() {
   try {
     // Initialize experimental voice features
     state.experimentalFeatures = new ExperimentalVoiceFeatures();
-    
+
     // Initialize experimental routing
-    state.experimentalRouting = new ExperimentalRouting(state.router, state.providers);
-    
+    state.experimentalRouting = new ExperimentalRouting(
+      state.router,
+      state.providers
+    );
+
     // Initialize experimental NLP
     state.experimentalNLP = new ExperimentalNLP();
-    
-    vscode.window.showInformationMessage('🧪 Experimentelle Features aktiviert!');
+
+    vscode.window.showInformationMessage(
+      "🧪 Experimentelle Features aktiviert!"
+    );
   } catch (error) {
-    console.warn('Experimental features initialization failed:', error);
-    vscode.window.showWarningMessage('Experimentelle Features konnten nicht initialisiert werden.');
+    console.warn("Experimental features initialization failed:", error);
+    vscode.window.showWarningMessage(
+      "Experimentelle Features konnten nicht initialisiert werden."
+    );
   }
 }
 
@@ -342,169 +391,256 @@ async function initializeExperimentalFeatures() {
 async function initializePhase3Features() {
   try {
     // Initialize Multi-Model Manager
-    state.multiModelManager = new MultiModelManager(state.router, state.providers);
-    
+    state.multiModelManager = new MultiModelManager(
+      state.router,
+      state.providers
+    );
+
     // Initialize AI Task Planner
     state.taskPlanner = new AITaskPlanner(state.router, state.providers);
-    
+
     // Initialize Advanced Prompting Manager
-    state.promptingManager = new AdvancedPromptingManager(state.router, state.providers);
-    
+    state.promptingManager = new AdvancedPromptingManager(
+      state.router,
+      state.providers
+    );
+
     // Initialize Context-Aware Code Analyzer
-    state.codeAnalyzer = new ContextAwareCodeAnalyzer(state.router, state.providers);
-    
-    vscode.window.showInformationMessage('🚀 Advanced AI Capabilities aktiviert!');
+    state.codeAnalyzer = new ContextAwareCodeAnalyzer(
+      state.router,
+      state.providers
+    );
+
+    vscode.window.showInformationMessage(
+      "🚀 Advanced AI Capabilities aktiviert!"
+    );
   } catch (error) {
-    console.warn('Phase 3 features initialization failed:', error);
-    vscode.window.showWarningMessage('Advanced AI Capabilities konnten nicht vollständig initialisiert werden.');
+    console.warn("Phase 3 features initialization failed:", error);
+    vscode.window.showWarningMessage(
+      "Advanced AI Capabilities konnten nicht vollständig initialisiert werden."
+    );
   }
 }
 
 function registerCommands(context: vscode.ExtensionContext) {
   // Core commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('modelRouter.chat', async () => {
+    vscode.commands.registerCommand("modelRouter.chat", async () => {
       await handleChatCommand();
     }),
-    
-    vscode.commands.registerCommand('modelRouter.openConfig', async () => {
+
+    vscode.commands.registerCommand("modelRouter.openConfig", async () => {
       await handleOpenConfigCommand();
     }),
-    
-    vscode.commands.registerCommand('modelRouter.estimateCost', async () => {
+
+    vscode.commands.registerCommand("modelRouter.estimateCost", async () => {
       await handleEstimateCostCommand();
     })
   );
-  
-  // Voice control commands
+
+  // Logging commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('modelRouter.startVoiceControl', async () => {
-      await handleStartVoiceControl();
+    vscode.commands.registerCommand("modelRouter.showLogs", async () => {
+      try {
+        await logger.showLatestLog();
+      } catch (error) {
+        vscode.window.showErrorMessage("Konnte Logdatei nicht öffnen");
+      }
     }),
-    
-    vscode.commands.registerCommand('modelRouter.stopVoiceControl', async () => {
-      await handleStopVoiceControl();
-    }),
-    
-    vscode.commands.registerCommand('modelRouter.toggleVoiceControl', async () => {
-      await handleToggleVoiceControl();
-    }),
-    
-    vscode.commands.registerCommand('modelRouter.voiceSettings', async () => {
-      await handleVoiceSettings();
-    }),
-    
-    vscode.commands.registerCommand('modelRouter.voicePermissions', async () => {
-      await handleVoicePermissions();
+
+    vscode.commands.registerCommand("modelRouter.clearLogs", async () => {
+      try {
+        logger.clearLogs();
+        vscode.window.showInformationMessage("Guido Logs gelöscht");
+      } catch (error) {
+        vscode.window.showErrorMessage("Konnte Logs nicht löschen");
+      }
     })
   );
-  
+
+  // Voice control commands
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "modelRouter.startVoiceControl",
+      async () => {
+        await handleStartVoiceControl();
+      }
+    ),
+
+    vscode.commands.registerCommand(
+      "modelRouter.stopVoiceControl",
+      async () => {
+        await handleStopVoiceControl();
+      }
+    ),
+
+    vscode.commands.registerCommand(
+      "modelRouter.toggleVoiceControl",
+      async () => {
+        await handleToggleVoiceControl();
+      }
+    ),
+
+    vscode.commands.registerCommand("modelRouter.voiceSettings", async () => {
+      await handleVoiceSettings();
+    }),
+
+    vscode.commands.registerCommand(
+      "modelRouter.voicePermissions",
+      async () => {
+        await handleVoicePermissions();
+      }
+    )
+  );
+
   // Phase 2: Workflow Optimization commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('modelRouter.newSession', async () => {
+    vscode.commands.registerCommand("modelRouter.newSession", async () => {
       await handleNewSessionCommand();
     }),
-    
-    vscode.commands.registerCommand('modelRouter.switchSession', async () => {
+
+    vscode.commands.registerCommand("modelRouter.switchSession", async () => {
       await handleSwitchSessionCommand();
     }),
-    
-    vscode.commands.registerCommand('modelRouter.searchHistory', async () => {
+
+    vscode.commands.registerCommand("modelRouter.searchHistory", async () => {
       await handleSearchHistoryCommand();
     }),
-    
-    vscode.commands.registerCommand('modelRouter.showSplitView', async () => {
+
+    vscode.commands.registerCommand("modelRouter.showSplitView", async () => {
       await handleShowSplitViewCommand();
     })
   );
-  
+
   // Phase 3: Advanced AI Capabilities commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('modelRouter.multiModelChat', async () => {
+    vscode.commands.registerCommand("modelRouter.multiModelChat", async () => {
       await handleMultiModelChatCommand();
     }),
-    
-    vscode.commands.registerCommand('modelRouter.createTaskPlan', async () => {
+
+    vscode.commands.registerCommand("modelRouter.createTaskPlan", async () => {
       await handleCreateTaskPlanCommand();
     }),
-    
-    vscode.commands.registerCommand('modelRouter.executeTaskPlan', async (planId?: string) => {
-      await handleExecuteTaskPlanCommand(planId);
-    }),
-    
-    vscode.commands.registerCommand('modelRouter.optimizePrompt', async () => {
+
+    vscode.commands.registerCommand(
+      "modelRouter.executeTaskPlan",
+      async (planId?: string) => {
+        await handleExecuteTaskPlanCommand(planId);
+      }
+    ),
+
+    vscode.commands.registerCommand("modelRouter.optimizePrompt", async () => {
       await handleOptimizePromptCommand();
     }),
-    
-    vscode.commands.registerCommand('modelRouter.analyzeCode', async () => {
+
+    vscode.commands.registerCommand("modelRouter.analyzeCode", async () => {
       await handleAnalyzeCodeCommand();
     }),
-    
-    vscode.commands.registerCommand('modelRouter.reviewPullRequest', async () => {
-      await handleReviewPullRequestCommand();
-    })
+
+    vscode.commands.registerCommand(
+      "modelRouter.reviewPullRequest",
+      async () => {
+        await handleReviewPullRequestCommand();
+      }
+    )
   );
-  
+
   // Experimental commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('modelRouter.experimental.emotionAnalysis', async () => {
-      await handleExperimentalEmotionAnalysis();
-    }),
-    
-    vscode.commands.registerCommand('modelRouter.experimental.contextEnhancement', async () => {
-      await handleExperimentalContextEnhancement();
-    }),
-    
-    vscode.commands.registerCommand('modelRouter.experimental.adaptiveRouting', async () => {
-      await handleExperimentalAdaptiveRouting();
-    }),
-    
-    vscode.commands.registerCommand('modelRouter.experimental.intentRecognition', async () => {
-      await handleExperimentalIntentRecognition();
-    }),
-    
-    vscode.commands.registerCommand('modelRouter.experimental.personalityAdaptation', async () => {
-      await handleExperimentalPersonalityAdaptation();
-    }),
-    
-    vscode.commands.registerCommand('modelRouter.experimental.multilingualProcessing', async () => {
-      await handleExperimentalMultilingualProcessing();
-    }),
-    
-    vscode.commands.registerCommand('modelRouter.experimental.performanceMetrics', async () => {
-      await handleExperimentalPerformanceMetrics();
-    }),
-    
-    vscode.commands.registerCommand('modelRouter.experimental.showUI', async () => {
-      await handleExperimentalShowUI();
-    }),
-    
-    vscode.commands.registerCommand('modelRouter.experimental.testFeatures', async () => {
-      await handleExperimentalTestFeatures();
-    })
+    vscode.commands.registerCommand(
+      "modelRouter.experimental.emotionAnalysis",
+      async () => {
+        await handleExperimentalEmotionAnalysis();
+      }
+    ),
+
+    vscode.commands.registerCommand(
+      "modelRouter.experimental.contextEnhancement",
+      async () => {
+        await handleExperimentalContextEnhancement();
+      }
+    ),
+
+    vscode.commands.registerCommand(
+      "modelRouter.experimental.adaptiveRouting",
+      async () => {
+        await handleExperimentalAdaptiveRouting();
+      }
+    ),
+
+    vscode.commands.registerCommand(
+      "modelRouter.experimental.intentRecognition",
+      async () => {
+        await handleExperimentalIntentRecognition();
+      }
+    ),
+
+    vscode.commands.registerCommand(
+      "modelRouter.experimental.personalityAdaptation",
+      async () => {
+        await handleExperimentalPersonalityAdaptation();
+      }
+    ),
+
+    vscode.commands.registerCommand(
+      "modelRouter.experimental.multilingualProcessing",
+      async () => {
+        await handleExperimentalMultilingualProcessing();
+      }
+    ),
+
+    vscode.commands.registerCommand(
+      "modelRouter.experimental.performanceMetrics",
+      async () => {
+        await handleExperimentalPerformanceMetrics();
+      }
+    ),
+
+    vscode.commands.registerCommand(
+      "modelRouter.experimental.showUI",
+      async () => {
+        await handleExperimentalShowUI();
+      }
+    ),
+
+    vscode.commands.registerCommand(
+      "modelRouter.experimental.testFeatures",
+      async () => {
+        await handleExperimentalTestFeatures();
+      }
+    )
   );
 }
 
 // Command handlers
 async function handleChatCommand() {
   const prompt = await vscode.window.showInputBox({
-    prompt: 'Geben Sie Ihre Nachricht ein:',
-    placeHolder: 'z.B. "Erkläre mir TypeScript"'
+    prompt: "Geben Sie Ihre Nachricht ein:",
+    placeHolder: 'z.B. "Erkläre mir TypeScript"',
   });
-  
+
   if (!prompt) return;
-  
+
   try {
     const routingContext = {
       prompt,
-      lang: 'de',
-      mode: 'auto'
+      lang: "de",
+      mode: "auto",
     };
-    
+
+    logger.info("chat_command_route_start", { routingContext });
     const result = await state.router.route(routingContext);
+    logger.info("chat_command_route_done", {
+      model: result.model,
+      provider: result.provider,
+    });
     await displayChatResult(result);
   } catch (error) {
-    vscode.window.showErrorMessage(`Fehler: ${error instanceof Error ? error.message : String(error)}`);
+    const message = `Fehler: ${
+      error instanceof Error ? error.message : String(error)
+    }`;
+    logger.error("chat_command_error", { message });
+    vscode.window.showErrorMessage(message);
   }
 }
 
