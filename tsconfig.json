@@ -13,9 +13,10 @@
     "declaration": true,
     "declarationMap": true,
     "resolveJsonModule": true,
-    "types": ["node", "vscode", "dom-speech-recognition"],
+    "types": ["node", "vscode"],
     "noUnusedLocals": false,
-    "noUnusedParameters": false
+    "noUnusedParameters": false,
+    "noImplicitAny": false
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "out"]

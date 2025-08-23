@@ -7,7 +7,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.OpenAICompatProvider = void 0;
 const base_1 = require("./base");
 class OpenAICompatProvider extends base_1.BaseProvider {
-    config;
     constructor(config) {
         super(config);
         this.config = config;

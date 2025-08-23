@@ -228,7 +228,7 @@ class ContextAwareVoiceCommands {
             });
             // Display result in a new document or notification
             const doc = await vscode.workspace.openTextDocument({
-                content: result.content || 'Keine Antwort erhalten',
+                content: result.content || result.response || 'Keine Antwort erhalten',
                 language: 'markdown'
             });
             await vscode.window.showTextDocument(doc);

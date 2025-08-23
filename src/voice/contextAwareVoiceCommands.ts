@@ -260,7 +260,7 @@ export class ContextAwareVoiceCommands {
       
       // Display result in a new document or notification
       const doc = await vscode.workspace.openTextDocument({
-        content: result.content || 'Keine Antwort erhalten',
+        content: (result as any).content || (result as any).response || 'Keine Antwort erhalten',
         language: 'markdown'
       });
       

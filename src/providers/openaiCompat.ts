@@ -80,7 +80,7 @@ export interface OpenAIResponse {
 }
 
 export class OpenAICompatProvider extends BaseProvider {
-  protected config: OpenAICompatConfig;
+  declare protected config: OpenAICompatConfig;
 
   constructor(config: OpenAICompatConfig) {
     super(config);

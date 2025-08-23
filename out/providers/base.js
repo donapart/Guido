@@ -53,11 +53,11 @@ class BaseProvider {
                             // accept unknown finish reasons but coerce to allowed union where possible
                             const fr = chunk.data.finishReason;
                             if (fr === "stop" || fr === "length" || fr === "tool_calls" || fr === "cancelled" || fr === undefined) {
-                                finishReason = fr ?? "stop";
+                                finishReason = (fr ?? "stop");
                             }
                             else {
                                 // preserve as string but cast (extension for forward compatibility)
-                                finishReason = fr; // fallback
+                                finishReason = "stop"; // fallback to safe default
                             }
                         }
                         break;

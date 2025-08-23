@@ -68,7 +68,7 @@ export interface OllamaModelInfo {
 }
 
 export class OllamaProvider extends BaseProvider {
-  protected config: OllamaConfig;
+  declare protected config: OllamaConfig;
 
   constructor(config: OllamaConfig) {
     super(config);
