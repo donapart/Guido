@@ -1,0 +1,32 @@
+# Guido Icon Pack (SVG)
+Consistent, minimalist icons for the Guido project.
+Style: orbit ring + 3 accent dots, blue/gray strokes, transparent background.
+Size: 256x256 viewBox, scalable.
+
+Names:
+- icon_api_key
+- icon_auto_wand
+- icon_cloud
+- icon_download
+- icon_error
+- icon_folder
+- icon_info
+- icon_language
+- icon_local_chip
+- icon_mic
+- icon_mic_off
+- icon_pause
+- icon_play
+- icon_privacy_lock
+- icon_quality
+- icon_record
+- icon_router
+- icon_save
+- icon_search
+- icon_settings
+- icon_speed
+- icon_stop
+- icon_success
+- icon_trash
+- icon_upload
+- icon_warning

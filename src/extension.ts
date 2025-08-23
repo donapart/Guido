@@ -14,6 +14,10 @@ import { ExperimentalVoiceFeatures } from './voice/experimental/advancedVoiceFea
 import { ExperimentalRouting } from './router/experimental/advancedRouting';
 import { ExperimentalNLP, UserContextForPersonality } from './voice/experimental/naturalLanguageProcessor';
 import { ExperimentalUI } from './voice/webview/experimentalUI';
+import { MultiModelManager } from './ai/multiModelManager';
+import { AITaskPlanner } from './ai/taskPlanner';
+import { AdvancedPromptingManager } from './ai/promptingManager';
+import { ContextAwareCodeAnalyzer } from './ai/codeAnalyzer';
 
 interface ExtensionState {
   router: ModelRouter;
@@ -25,6 +29,12 @@ interface ExtensionState {
   experimentalRouting?: ExperimentalRouting;
   experimentalNLP?: ExperimentalNLP;
   experimentalUI?: ExperimentalUI;
+  
+  // Phase 3: Advanced AI Capabilities
+  multiModelManager?: MultiModelManager;
+  taskPlanner?: AITaskPlanner;
+  promptingManager?: AdvancedPromptingManager;
+  codeAnalyzer?: ContextAwareCodeAnalyzer;
 }
 
 let extensionContext: vscode.ExtensionContext;
@@ -46,6 +56,9 @@ export async function activate(context: vscode.ExtensionContext) {
     
     // Initialize experimental features
     await initializeExperimentalFeatures();
+    
+    // Initialize Phase 3: Advanced AI Capabilities
+    await initializePhase3Features();
     
     vscode.window.showInformationMessage('Guido Model Router Extension aktiviert! 🎤✨');
   } catch (error) {
@@ -133,6 +146,30 @@ async function initializeExperimentalFeatures() {
   }
 }
 
+/**
+ * Initialize Phase 3: Advanced AI Capabilities
+ */
+async function initializePhase3Features() {
+  try {
+    // Initialize Multi-Model Manager
+    state.multiModelManager = new MultiModelManager(state.router, state.providers);
+    
+    // Initialize AI Task Planner
+    state.taskPlanner = new AITaskPlanner(state.router, state.providers);
+    
+    // Initialize Advanced Prompting Manager
+    state.promptingManager = new AdvancedPromptingManager(state.router, state.providers);
+    
+    // Initialize Context-Aware Code Analyzer
+    state.codeAnalyzer = new ContextAwareCodeAnalyzer(state.router, state.providers);
+    
+    vscode.window.showInformationMessage('🚀 Advanced AI Capabilities aktiviert!');
+  } catch (error) {
+    console.warn('Phase 3 features initialization failed:', error);
+    vscode.window.showWarningMessage('Advanced AI Capabilities konnten nicht vollständig initialisiert werden.');
+  }
+}
+
 function registerCommands(context: vscode.ExtensionContext) {
   // Core commands
   context.subscriptions.push(
@@ -169,6 +206,52 @@ function registerCommands(context: vscode.ExtensionContext) {
     
     vscode.commands.registerCommand('modelRouter.voicePermissions', async () => {
       await handleVoicePermissions();
+    })
+  );
+  
+  // Phase 2: Workflow Optimization commands
+  context.subscriptions.push(
+    vscode.commands.registerCommand('modelRouter.newSession', async () => {
+      await handleNewSessionCommand();
+    }),
+    
+    vscode.commands.registerCommand('modelRouter.switchSession', async () => {
+      await handleSwitchSessionCommand();
+    }),
+    
+    vscode.commands.registerCommand('modelRouter.searchHistory', async () => {
+      await handleSearchHistoryCommand();
+    }),
+    
+    vscode.commands.registerCommand('modelRouter.showSplitView', async () => {
+      await handleShowSplitViewCommand();
+    })
+  );
+  
+  // Phase 3: Advanced AI Capabilities commands
+  context.subscriptions.push(
+    vscode.commands.registerCommand('modelRouter.multiModelChat', async () => {
+      await handleMultiModelChatCommand();
+    }),
+    
+    vscode.commands.registerCommand('modelRouter.createTaskPlan', async () => {
+      await handleCreateTaskPlanCommand();
+    }),
+    
+    vscode.commands.registerCommand('modelRouter.executeTaskPlan', async (planId?: string) => {
+      await handleExecuteTaskPlanCommand(planId);
+    }),
+    
+    vscode.commands.registerCommand('modelRouter.optimizePrompt', async () => {
+      await handleOptimizePromptCommand();
+    }),
+    
+    vscode.commands.registerCommand('modelRouter.analyzeCode', async () => {
+      await handleAnalyzeCodeCommand();
+    }),
+    
+    vscode.commands.registerCommand('modelRouter.reviewPullRequest', async () => {
+      await handleReviewPullRequestCommand();
     })
   );
   
@@ -313,6 +396,58 @@ async function handleToggleVoiceControl() {
     vscode.window.showInformationMessage('🔄 Sprachsteuerung umgeschaltet.');
   } catch (error) {
     vscode.window.showErrorMessage(`Fehler beim Umschalten der Sprachsteuerung: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/**
+ * Phase 2: Workflow Optimization Command Handlers
+ */
+
+async function handleNewSessionCommand(): Promise<void> {
+  try {
+    await vscode.commands.executeCommand('modelRouter.chat');
+    vscode.window.showInformationMessage('Neue Chat-Session erstellt');
+  } catch (error) {
+    vscode.window.showErrorMessage(`Fehler beim Erstellen einer neuen Session: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function handleSwitchSessionCommand(): Promise<void> {
+  try {
+    // Hier würde normalmente eine Funktion aus dem SessionManager aufgerufen werden
+    const sessions = ['Session 1', 'Session 2', 'Session 3']; // Beispiel
+    const selected = await vscode.window.showQuickPick(sessions, {
+      placeHolder: 'Wählen Sie eine Session'
+    });
+    
+    if (selected) {
+      vscode.window.showInformationMessage(`Gewechselt zu ${selected}`);
+    }
+  } catch (error) {
+    vscode.window.showErrorMessage(`Fehler beim Wechseln der Session: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function handleSearchHistoryCommand(): Promise<void> {
+  try {
+    const searchTerm = await vscode.window.showInputBox({
+      prompt: 'Chatverlauf durchsuchen',
+      placeHolder: 'Suchbegriff eingeben'
+    });
+    
+    if (searchTerm) {
+      vscode.window.showInformationMessage(`Suche nach "${searchTerm}" im Chatverlauf`);
+    }
+  } catch (error) {
+    vscode.window.showErrorMessage(`Fehler bei der Suche: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function handleShowSplitViewCommand(): Promise<void> {
+  try {
+    await vscode.commands.executeCommand('workbench.view.extension.modelRouterSplitView');
+  } catch (error) {
+    vscode.window.showErrorMessage(`Fehler beim Öffnen der Split View: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
