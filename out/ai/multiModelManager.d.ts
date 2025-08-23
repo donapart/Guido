@@ -1,12 +1,12 @@
 /**
  * Multi-Model Manager for parallel and sequential AI model execution
  */
-import { ModelRouter } from '../router';
-import { Provider } from '../providers/base';
+import { Provider } from "../providers/base";
+import { ModelRouter } from "../router";
 export interface MultiModelRequest {
     prompt: string;
     models: string[];
-    strategy: 'parallel' | 'sequential' | 'consensus' | 'comparison';
+    strategy: "parallel" | "sequential" | "consensus" | "comparison";
     options?: {
         temperature?: number;
         maxTokens?: number;

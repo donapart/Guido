@@ -8,8 +8,13 @@ import { loadConfiguration, ProfileConfig } from './config';
 import { VSCodeSecretManager } from './secret';
 import { OpenAICompatProvider } from './providers/openaiCompat';
 import { OllamaProvider } from './providers/ollama';
+import { AnthropicProvider } from './providers/anthropic';
+import { CohereProvider } from './providers/cohere';
+import { OpenRouterProvider } from './providers/openrouter';
+import { HuggingFaceProvider } from './providers/huggingface';
 import { VoiceController } from './voice/voiceController';
-import type { VoiceConfig } from './voice/types';
+import { ContextAwareVoiceCommands } from './voice/contextAwareVoiceCommands';
+import { AdvancedDashboardUI } from './ui/advancedDashboard';
 import { ExperimentalVoiceFeatures } from './voice/experimental/advancedVoiceFeatures';
 import { ExperimentalRouting } from './router/experimental/advancedRouting';
 import { ExperimentalNLP, UserContextForPersonality } from './voice/experimental/naturalLanguageProcessor';
@@ -25,6 +30,8 @@ interface ExtensionState {
   config: ProfileConfig;
   secretManager: VSCodeSecretManager;
   voiceController?: VoiceController;
+  contextAwareVoice?: ContextAwareVoiceCommands;
+  advancedDashboard?: AdvancedDashboardUI;
   experimentalFeatures?: ExperimentalVoiceFeatures;
   experimentalRouting?: ExperimentalRouting;
   experimentalNLP?: ExperimentalNLP;
@@ -53,6 +60,11 @@ export async function activate(context: vscode.ExtensionContext) {
     if (state.config.voice?.enabled) {
       await initializeVoiceControl();
     }
+    
+    // Initialize Phase 4: Enterprise Extensions  
+    await initializeEnterpriseProviders(state.providers);
+    await initializeEnterpriseUI(context);
+    await initializeEnterpriseVoiceCommands(context);
     
     // Initialize experimental features
     await initializeExperimentalFeatures();
@@ -100,6 +112,9 @@ async function initializeExtension() {
       console.warn(`Failed to initialize provider ${providerConfig.id}:`, error);
     }
   }
+
+  // Initialize enterprise providers (Phase 4)
+  await initializeEnterpriseProviders(providers);
   
   // Initialize router
   const router = new ModelRouter(config, providers);
@@ -112,6 +127,178 @@ async function initializeExtension() {
   };
 }
 
+async function initializeEnterpriseProviders(providers: Map<string, unknown>) {
+  const workspaceConfig = vscode.workspace.getConfiguration('modelRouter');
+  
+  try {
+    // Initialize Anthropic Provider
+    const anthropicKey = workspaceConfig.get<string>('anthropicApiKey');
+    if (anthropicKey && anthropicKey.trim()) {
+      try {
+        const anthropicProvider = new AnthropicProvider({
+          id: 'anthropic',
+          kind: 'custom',
+          baseUrl: 'https://api.anthropic.com',
+          apiKey: anthropicKey,
+          models: [
+            'claude-3-5-sonnet-20241022',
+            'claude-3-opus-20240229',
+            'claude-3-haiku-20240307'
+          ],
+          model: 'claude-3-5-sonnet-20241022',
+          maxTokens: 4096,
+          temperature: 0.7
+        });
+        providers.set('anthropic', anthropicProvider);
+        console.log('✅ Anthropic Provider initialized successfully');
+      } catch (error) {
+        console.warn('❌ Anthropic initialization failed:', error);
+      }
+    }
+    
+    // Initialize Cohere Provider
+    const cohereKey = workspaceConfig.get<string>('cohereApiKey');
+    if (cohereKey && cohereKey.trim()) {
+      try {
+        const cohereProvider = new CohereProvider({
+          id: 'cohere',
+          kind: 'custom',
+          baseUrl: 'https://api.cohere.ai',
+          apiKey: cohereKey,
+          models: [
+            'command-r-plus',
+            'command-r',
+            'command',
+            'command-nightly'
+          ],
+          model: 'command-r-plus',
+          maxTokens: 4096,
+          temperature: 0.7
+        });
+        providers.set('cohere', cohereProvider);
+        console.log('✅ Cohere Provider initialized successfully');
+      } catch (error) {
+        console.warn('❌ Cohere initialization failed:', error);
+      }
+    }
+    
+    // Initialize OpenRouter Provider
+    const openrouterKey = workspaceConfig.get<string>('openrouterApiKey');
+    if (openrouterKey && openrouterKey.trim()) {
+      try {
+        const openrouterProvider = new OpenRouterProvider({
+          id: 'openrouter',
+          kind: 'custom',
+          baseUrl: 'https://openrouter.ai/api/v1',
+          apiKey: openrouterKey,
+          models: [
+            'openai/gpt-4o',
+            'openai/gpt-4-turbo',
+            'anthropic/claude-3-5-sonnet',
+            'meta-llama/llama-3.1-70b-instruct',
+            'google/gemini-pro',
+            'mistralai/mistral-7b-instruct'
+          ],
+          model: 'openai/gpt-4o',
+          maxTokens: 4096,
+          temperature: 0.7
+        });
+        providers.set('openrouter', openrouterProvider);
+        console.log('✅ OpenRouter Provider initialized successfully');
+      } catch (error) {
+        console.warn('❌ OpenRouter initialization failed:', error);
+      }
+    }
+    
+    // Initialize Hugging Face Provider
+    const huggingfaceKey = workspaceConfig.get<string>('huggingfaceApiKey');
+    if (huggingfaceKey && huggingfaceKey.trim()) {
+      try {
+        const huggingfaceProvider = new HuggingFaceProvider({
+          id: 'huggingface',
+          kind: 'custom',
+          baseUrl: 'https://api-inference.huggingface.co',
+          apiKey: huggingfaceKey,
+          models: [
+            'microsoft/DialoGPT-large',
+            'meta-llama/Llama-2-7b-chat-hf',
+            'mistralai/Mistral-7B-Instruct-v0.1',
+            'google/flan-t5-xl',
+            'Salesforce/codegen-2B-multi'
+          ],
+          model: 'microsoft/DialoGPT-large',
+          maxTokens: 1024,
+          temperature: 0.7,
+          useCache: true,
+          waitForModel: false
+        });
+        providers.set('huggingface', huggingfaceProvider);
+        console.log('✅ Hugging Face Provider initialized successfully');
+      } catch (error) {
+        console.warn('❌ Hugging Face initialization failed:', error);
+      }
+    }
+    
+    console.log(`🚀 Initialized ${providers.size} providers total`);
+  } catch (error) {
+    console.warn('Enterprise provider initialization failed:', error);
+  }
+}
+
+// Enterprise UI initialization
+async function initializeEnterpriseUI(context: vscode.ExtensionContext) {
+  try {
+    // Register Advanced Dashboard command
+    const showDashboardCommand = vscode.commands.registerCommand('modelRouter.showAdvancedDashboard', async () => {
+      try {
+        const dashboard = new AdvancedDashboardUI(state.router);
+        dashboard.createDashboard();
+        console.log('✅ Advanced Dashboard opened successfully');
+      } catch (error) {
+        console.error('❌ Failed to open Advanced Dashboard:', error);
+        vscode.window.showErrorMessage('Fehler beim Öffnen des Advanced Dashboard');
+      }
+    });
+    
+    context.subscriptions.push(showDashboardCommand);
+    console.log('✅ Enterprise UI commands registered');
+  } catch (error) {
+    console.warn('Enterprise UI initialization failed:', error);
+  }
+}
+
+// Enterprise Voice Commands initialization  
+async function initializeEnterpriseVoiceCommands(context: vscode.ExtensionContext) {
+  try {
+    // Register voice command context command
+    const contextVoiceCommand = vscode.commands.registerCommand('modelRouter.contextVoiceCommand', async () => {
+      try {
+        if (state.contextAwareVoice) {
+          const transcript = await vscode.window.showInputBox({
+            prompt: 'Geben Sie Ihren Sprachbefehl ein:',
+            placeHolder: 'z.B. "Erkläre den ausgewählten Code"'
+          });
+          
+          if (transcript) {
+            await state.contextAwareVoice.processVoiceCommand(transcript);
+            console.log('✅ Context-aware voice command processed');
+          }
+        } else {
+          vscode.window.showWarningMessage('Context-aware voice commands not available');
+        }
+      } catch (error) {
+        console.error('❌ Context voice command failed:', error);
+        vscode.window.showErrorMessage('Fehler bei der kontext-sensitiven Sprachsteuerung');
+      }
+    });
+    
+    context.subscriptions.push(contextVoiceCommand);
+    console.log('✅ Enterprise Voice Commands initialized');
+  } catch (error) {
+    console.warn('Enterprise Voice Commands initialization failed:', error);
+  }
+}
+
 async function initializeVoiceControl() {
   if (!state.config.voice) {
     return;
@@ -121,7 +308,10 @@ async function initializeVoiceControl() {
     state.voiceController = new VoiceController(extensionContext, state.config.voice, state.router);
     await state.voiceController.initialize();
     
-    vscode.window.showInformationMessage('Guido Voice Control initialisiert! 🎤');
+    // Initialize Context-Aware Voice Commands (Phase 4)
+    state.contextAwareVoice = new ContextAwareVoiceCommands(state.router, state.voiceController);
+    
+    vscode.window.showInformationMessage('Guido Voice Control mit Context-Aware Commands initialisiert! 🎤✨');
   } catch (error) {
     console.warn('Voice control initialization failed:', error);
     vscode.window.showWarningMessage('Voice Control konnte nicht initialisiert werden.');

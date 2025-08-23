@@ -75,8 +75,8 @@ export interface RouterConfig {
     profiles: Record<string, ProfileConfig>;
 }
 export declare class ConfigError extends Error {
-    path?: string | undefined;
-    constructor(message: string, path?: string | undefined);
+    path?: string;
+    constructor(message: string, path?: string);
 }
 export declare class ConfigLoader {
     private static instance;

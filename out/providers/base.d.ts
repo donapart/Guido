@@ -117,9 +117,9 @@ export declare abstract class BaseProvider implements Provider {
  */
 export declare class ProviderError extends Error {
     provider: string;
-    model?: string | undefined;
-    statusCode?: number | undefined;
-    constructor(message: string, provider: string, model?: string | undefined, statusCode?: number | undefined);
+    model?: string;
+    statusCode?: number;
+    constructor(message: string, provider: string, model?: string, statusCode?: number);
 }
 export declare class RateLimitError extends ProviderError {
     constructor(provider: string, model?: string, retryAfter?: number);

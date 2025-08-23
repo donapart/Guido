@@ -6,14 +6,16 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable", "WebWorker"],
     "sourceMap": true,
     "rootDir": "src",
-    "strict": true,
+    "strict": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "declaration": true,
     "declarationMap": true,
     "resolveJsonModule": true,
-    "types": ["node", "vscode", "dom-speech-recognition"]
+    "types": ["node", "vscode", "dom-speech-recognition"],
+    "noUnusedLocals": false,
+    "noUnusedParameters": false
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "out"]

@@ -80,7 +80,7 @@ export declare class BudgetManager {
     private storage;
     private readonly STORAGE_KEY;
     private transactionListeners;
-    constructor(persistentStorage?: any | undefined);
+    constructor(persistentStorage?: any);
     /**
      * Record a cost transaction
      */

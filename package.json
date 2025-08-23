@@ -2,7 +2,7 @@
   "name": "model-router",
   "displayName": "Guido Model Router",
   "description": "Intelligenter AI Model Router mit Sprachsteuerung und experimentellen Features",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "publisher": "model-router",
   "repository": {
     "type": "git",
@@ -194,6 +194,16 @@
           "type": "boolean",
           "default": true,
           "description": "Enable personality adaptation"
+        },
+        "modelRouter.openrouterApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "OpenRouter API Key for universal model access"
+        },
+        "modelRouter.huggingfaceApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Hugging Face API Key for Hugging Face models"
         }
       }
     }
@@ -204,7 +214,10 @@
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
-    "test": "node ./out/test/runTest.js"
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "package": "vsce package"
   },
   "devDependencies": {
     "@types/vscode": "^1.99.0",
@@ -213,10 +226,42 @@
     "@typescript-eslint/parser": "^6.0.0",
     "eslint": "^8.0.0",
     "typescript": "^5.0.0",
-    "@types/dom-speech-recognition": "^0.1.0"
+    "@types/dom-speech-recognition": "^0.1.0",
+    "jest": "^29.7.0",
+    "@types/jest": "^29.5.8",
+    "ts-jest": "^29.1.1",
+    "vsce": "^2.15.0"
   },
   "dependencies": {
-    "js-yaml": "^4.1.0"
+    "js-yaml": "^4.1.0",
+    "axios": "^1.6.0",
+    "ws": "^8.14.0"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "roots": [
+      "<rootDir>/src",
+      "<rootDir>/test"
+    ],
+    "testMatch": [
+      "**/__tests__/**/*.ts",
+      "**/*.(test|spec).ts"
+    ],
+    "collectCoverageFrom": [
+      "src/**/*.ts",
+      "!src/**/*.d.ts",
+      "!src/test/**"
+    ],
+    "coverageDirectory": "coverage",
+    "coverageReporters": [
+      "text",
+      "lcov",
+      "html"
+    ],
+    "setupFilesAfterEnv": [
+      "<rootDir>/test/setup.ts"
+    ]
   },
   "l10n": "./l10n"
 }
