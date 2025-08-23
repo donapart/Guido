@@ -2,7 +2,7 @@
   "name": "model-router",
   "displayName": "Guido Model Router",
   "description": "Intelligenter AI Model Router mit Sprachsteuerung und experimentellen Features",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "publisher": "model-router",
   "repository": {
     "type": "git",

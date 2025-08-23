@@ -1,4 +1,7 @@
 "use strict";
+/**
+ * Context-Aware Code Analyzer for comprehensive code analysis
+ */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
@@ -40,632 +43,352 @@ const path = __importStar(require("path"));
 class ContextAwareCodeAnalyzer {
     router;
     providers;
-    contextCache = new Map();
-    projectStructure;
     constructor(router, providers) {
         this.router = router;
         this.providers = providers;
     }
-    /**
-     * Analyze code with full context awareness
-     */
     async analyzeCode(request) {
-        // Build comprehensive context
-        const context = await this.buildAnalysisContext(request);
-        // Generate analysis prompt
-        const analysisPrompt = this.buildAnalysisPrompt(request, context);
+        let codeContent;
+        let context = {};
+        // Get code content based on request type
+        switch (request.type) {
+            case 'single_file':
+                codeContent = await this.readFile(request.target);
+                context = await this.getFileContext(request.target);
+                break;
+            case 'selection':
+                codeContent = request.target; // target is the code snippet
+                context = await this.getCurrentFileContext();
+                break;
+            case 'directory':
+                codeContent = await this.readDirectory(request.target);
+                context = await this.getDirectoryContext(request.target);
+                break;
+            case 'project':
+                codeContent = await this.readProject(request.target);
+                context = await this.getProjectContext(request.target);
+                break;
+            default:
+                throw new Error(`Unknown analysis type: ${request.type}`);
+        }
+        const analysisPrompt = this.buildAnalysisPrompt(request, codeContent, context);
         try {
-            const result = await this.router.route({
+            const routingResult = await this.router.route({
                 prompt: analysisPrompt,
-                mode: request.focus === 'quality' ? 'quality' : 'auto'
+                lang: 'de',
+                mode: request.depth === 'deep' ? 'quality' : 'balanced'
             });
-            const provider = this.providers.get(result.providerId);
-            if (!provider) {
-                throw new Error(`Provider ${result.providerId} not found`);
-            }
-            const messages = [
-                { role: 'user', content: analysisPrompt }
-            ];
-            const response = await provider.chatComplete(result.modelName, messages, {
-                maxTokens: 6000,
-                temperature: 0.3,
-                json: true
+            const result = await routingResult.provider.chatComplete(routingResult.modelName, [{ role: 'user', content: analysisPrompt }], {
+                maxTokens: request.depth === 'deep' ? 3000 : 2000,
+                temperature: 0.2 // Low temperature for consistent analysis
             });
-            const analysisData = JSON.parse(response.content);
-            return {
-                summary: analysisData.summary || 'Analysis completed',
-                findings: this.parseFindings(analysisData.findings || []),
-                recommendations: this.parseRecommendations(analysisData.recommendations || []),
-                metrics: this.calculateMetrics(context),
-                context,
-                confidence: analysisData.confidence || 0.8
-            };
+            return this.parseAnalysisResult(result.content, request, context);
         }
         catch (error) {
-            console.error('Code analysis failed:', error);
-            return this.fallbackAnalysis(request, context);
+            throw new Error(`Code analysis failed: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
-    /**
-     * Get project structure and context
-     */
-    async getProjectStructure(rootPath) {
-        if (this.projectStructure?.rootPath === rootPath) {
-            return this.projectStructure;
-        }
-        const structure = {
-            rootPath,
-            files: [],
-            directories: [],
-            dependencies: [],
-            devDependencies: []
+    async reviewPullRequest(prUrl) {
+        // This would integrate with GitHub/GitLab APIs
+        // For now, return a placeholder
+        return {
+            summary: 'Pull Request review functionality will be implemented in a future version',
+            approval: 'comment',
+            findings: [],
+            recommendations: ['Implement PR review integration with GitHub/GitLab APIs']
         };
+    }
+    async readFile(filePath) {
         try {
-            // Read package.json if it exists
-            const packageJsonPath = path.join(rootPath, 'package.json');
-            if (fs.existsSync(packageJsonPath)) {
-                structure.packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-                structure.dependencies = Object.keys(structure.packageJson.dependencies || {});
-                structure.devDependencies = Object.keys(structure.packageJson.devDependencies || {});
-                // Detect framework
-                structure.framework = this.detectFramework(structure.dependencies);
-            }
-            // Read tsconfig.json if it exists
-            const tsConfigPath = path.join(rootPath, 'tsconfig.json');
-            if (fs.existsSync(tsConfigPath)) {
-                structure.tsConfig = JSON.parse(fs.readFileSync(tsConfigPath, 'utf8'));
-            }
-            // Scan directory structure
-            await this.scanDirectory(rootPath, structure, 0, 3); // Max depth 3
-            this.projectStructure = structure;
-            return structure;
+            return fs.readFileSync(filePath, 'utf-8');
         }
         catch (error) {
-            console.error('Failed to analyze project structure:', error);
-            return structure;
+            throw new Error(`Could not read file ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
-    /**
-     * Analyze single file with context
-     */
-    async analyzeFile(filePath) {
-        if (this.contextCache.has(filePath)) {
-            return this.contextCache.get(filePath);
-        }
+    async readDirectory(dirPath) {
+        // Read all code files in directory (simplified implementation)
         try {
-            const content = fs.readFileSync(filePath, 'utf8');
-            const language = this.detectLanguage(filePath);
-            const context = {
-                file: filePath,
-                content,
-                language,
-                dependencies: this.extractDependencies(content, language),
-                imports: this.extractImports(content, language),
-                exports: this.extractExports(content, language),
-                functions: this.extractFunctions(content, language),
-                classes: this.extractClasses(content, language),
-                interfaces: this.extractInterfaces(content, language),
-                types: this.extractTypes(content, language)
-            };
-            this.contextCache.set(filePath, context);
-            return context;
+            const files = fs.readdirSync(dirPath);
+            let content = '';
+            for (const file of files) {
+                if (this.isCodeFile(file)) {
+                    const fullPath = path.join(dirPath, file);
+                    const fileContent = fs.readFileSync(fullPath, 'utf-8');
+                    content += `\n\n--- File: ${file} ---\n${fileContent}`;
+                }
+            }
+            return content;
         }
         catch (error) {
-            console.error(`Failed to analyze file ${filePath}:`, error);
-            return {
-                file: filePath,
-                content: '',
-                language: 'unknown',
-                dependencies: [],
-                imports: [],
-                exports: [],
-                functions: [],
-                classes: [],
-                interfaces: [],
-                types: []
-            };
+            throw new Error(`Could not read directory ${dirPath}: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
-    /**
-     * Build comprehensive analysis context
-     */
-    async buildAnalysisContext(request) {
-        const context = [];
-        if (request.type === 'single_file') {
-            const fileContext = await this.analyzeFile(request.target);
-            context.push(fileContext);
-            // Include related files if requested
-            if (request.includeContext) {
-                const relatedFiles = await this.findRelatedFiles(request.target);
-                for (const relatedFile of relatedFiles.slice(0, 5)) { // Limit to 5 related files
-                    const relatedContext = await this.analyzeFile(relatedFile);
-                    context.push(relatedContext);
-                }
-            }
-        }
-        else if (request.type === 'project_wide') {
-            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-            if (workspaceFolder) {
-                const projectStructure = await this.getProjectStructure(workspaceFolder.uri.fsPath);
-                // Analyze key files
-                const keyFiles = this.identifyKeyFiles(projectStructure);
-                for (const keyFile of keyFiles.slice(0, 10)) { // Limit to 10 files
-                    const fileContext = await this.analyzeFile(keyFile);
-                    context.push(fileContext);
-                }
-            }
-        }
-        return context;
+    async readProject(projectPath) {
+        // Simplified project reading - would need more sophisticated logic
+        return this.readDirectory(projectPath);
     }
-    /**
-     * Build analysis prompt with context
-     */
-    buildAnalysisPrompt(request, context) {
-        let prompt = `You are an expert code analyzer. Perform a ${request.depth} analysis focused on ${request.focus}.
-
-ANALYSIS REQUEST:
-- Type: ${request.type}
-- Target: ${request.target}
-- Focus: ${request.focus}
-- Depth: ${request.depth}
-
-CODE CONTEXT:
-`;
-        context.forEach((ctx, index) => {
-            prompt += `
-File ${index + 1}: ${ctx.file}
-Language: ${ctx.language}
-Dependencies: ${ctx.dependencies.join(', ')}
-Functions: ${ctx.functions.length}
-Classes: ${ctx.classes.length}
-
-Code:
-\`\`\`${ctx.language}
-${ctx.content.length > 2000 ? ctx.content.substring(0, 2000) + '...' : ctx.content}
-\`\`\`
-
-`;
-        });
+    async getFileContext(filePath) {
+        const ext = path.extname(filePath);
+        const language = this.getLanguageFromExtension(ext);
+        return {
+            file_path: filePath,
+            language,
+            file_size: fs.statSync(filePath).size,
+            last_modified: fs.statSync(filePath).mtime
+        };
+    }
+    async getCurrentFileContext() {
+        const activeEditor = vscode.window.activeTextEditor;
+        if (!activeEditor) {
+            return { language: 'unknown' };
+        }
+        return {
+            file_path: activeEditor.document.fileName,
+            language: activeEditor.document.languageId,
+            line_count: activeEditor.document.lineCount
+        };
+    }
+    async getDirectoryContext(dirPath) {
+        const files = fs.readdirSync(dirPath);
+        const codeFiles = files.filter(f => this.isCodeFile(f));
+        return {
+            directory: dirPath,
+            total_files: files.length,
+            code_files: codeFiles.length,
+            file_types: [...new Set(codeFiles.map(f => path.extname(f)))]
+        };
+    }
+    async getProjectContext(projectPath) {
+        // Look for package.json, tsconfig.json, etc.
+        const configFiles = ['package.json', 'tsconfig.json', 'webpack.config.js', 'vite.config.js'];
+        const foundConfigs = [];
+        for (const config of configFiles) {
+            const configPath = path.join(projectPath, config);
+            if (fs.existsSync(configPath)) {
+                foundConfigs.push(config);
+            }
+        }
+        return {
+            project_path: projectPath,
+            config_files: foundConfigs,
+            project_type: this.inferProjectType(foundConfigs)
+        };
+    }
+    buildAnalysisPrompt(request, code, context) {
         const focusInstructions = {
-            quality: `Focus on:
-1. Code quality and readability
-2. Adherence to best practices
-3. Code smells and anti-patterns
-4. Maintainability issues
-5. Naming conventions`,
-            security: `Focus on:
-1. Security vulnerabilities
-2. Input validation issues
-3. Authentication and authorization
-4. Data exposure risks
-5. Injection attacks`,
-            performance: `Focus on:
-1. Performance bottlenecks
-2. Memory usage optimization
-3. Algorithm efficiency
-4. Database query optimization
-5. Caching opportunities`,
-            architecture: `Focus on:
-1. Architectural patterns
-2. Design principles (SOLID)
-3. Component coupling
-4. Separation of concerns
-5. Scalability considerations`,
-            documentation: `Focus on:
-1. Code documentation quality
-2. Missing documentation
-3. API documentation
-4. Comment clarity
-5. Documentation completeness`,
-            testing: `Focus on:
-1. Test coverage analysis
-2. Test quality assessment
-3. Missing test cases
-4. Test maintainability
-5. Testing best practices`
+            quality: 'Focus on code quality, maintainability, readability, and adherence to best practices.',
+            security: 'Focus on security vulnerabilities, potential exploits, and secure coding practices.',
+            performance: 'Focus on performance bottlenecks, optimization opportunities, and efficiency.',
+            architecture: 'Focus on software architecture, design patterns, and structural improvements.',
+            documentation: 'Focus on code documentation, comments, and self-documenting code practices.',
+            testing: 'Focus on test coverage, test quality, and testability of the code.'
         };
-        prompt += focusInstructions[request.focus];
-        prompt += `
+        const depthInstructions = {
+            shallow: 'Provide a quick overview with major issues only.',
+            medium: 'Provide a balanced analysis with moderate detail.',
+            deep: 'Provide a comprehensive, detailed analysis with in-depth explanations.'
+        };
+        return `You are an expert code reviewer and software architect. Analyze the following code.
 
-Please provide your analysis in the following JSON format:
+ANALYSIS FOCUS: ${focusInstructions[request.focus]}
+ANALYSIS DEPTH: ${depthInstructions[request.depth]}
 
-{
-  "summary": "High-level summary of findings",
-  "findings": [
-    {
-      "type": "issue|improvement|warning|info",
-      "category": "specific category",
-      "severity": "low|medium|high|critical",
-      "message": "Brief message",
-      "location": {
-        "file": "file path",
-        "line": line_number
-      },
-      "description": "Detailed description",
-      "examples": ["example solutions"]
+CONTEXT:
+${JSON.stringify(context, null, 2)}
+
+CODE TO ANALYZE:
+${code}
+
+Please provide a structured analysis with:
+
+1. SUMMARY: Overall assessment and key insights
+2. FINDINGS: Specific issues found with severity levels (critical, high, medium, low)
+3. RECOMMENDATIONS: Actionable improvement suggestions with priority and effort estimates
+4. METRICS: Code metrics and quality indicators
+5. PATTERNS: Detected patterns and architectural insights
+
+For each finding, include:
+- Severity level
+- Category
+- Description
+- Location (line numbers if applicable)
+- Suggested fix
+
+For each recommendation, include:
+- Type and priority
+- Description and benefits
+- Implementation approach
+- Estimated effort
+
+Be specific and actionable in your feedback.`;
     }
-  ],
-  "recommendations": [
-    {
-      "type": "refactor|optimize|security|documentation|testing",
-      "priority": "low|medium|high",
-      "title": "Recommendation title",
-      "description": "Detailed description",
-      "implementation": "How to implement",
-      "estimated_effort": "small|medium|large",
-      "benefits": ["benefit1", "benefit2"]
-    }
-  ],
-  "confidence": 0.0-1.0
-}`;
-        return prompt;
-    }
-    /**
-     * Find files related to the target file
-     */
-    async findRelatedFiles(filePath) {
-        const related = [];
-        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-        if (!workspaceFolder)
-            return related;
-        const fileContext = await this.analyzeFile(filePath);
-        const baseName = path.basename(filePath, path.extname(filePath));
-        const dirName = path.dirname(filePath);
-        // Find files with similar names
-        const pattern = new vscode.RelativePattern(workspaceFolder, `**/*${baseName}*`);
-        const similarFiles = await vscode.workspace.findFiles(pattern);
-        // Find files that import this file
-        const allFiles = await vscode.workspace.findFiles('**/*.{ts,js,tsx,jsx}');
-        for (const file of allFiles) {
-            if (file.fsPath === filePath)
+    parseAnalysisResult(response, request, context) {
+        // Simplified parsing - in a real implementation, this would be more sophisticated
+        const lines = response.split('\n');
+        const result = {
+            summary: 'Code analysis completed',
+            confidence: 0.8,
+            findings: [],
+            recommendations: [],
+            metrics: {
+                lines_of_code: this.estimateLineCount(request.target),
+                cyclomatic_complexity: 5, // placeholder
+                maintainability_index: 70, // placeholder
+                technical_debt: 2.5 // placeholder
+            },
+            context: {
+                language: request.language || context.language || 'unknown',
+                patterns_detected: []
+            }
+        };
+        let currentSection = '';
+        let currentFinding = {};
+        let currentRecommendation = {};
+        for (const line of lines) {
+            const lowerLine = line.toLowerCase();
+            if (lowerLine.includes('summary')) {
+                currentSection = 'summary';
                 continue;
-            try {
-                const content = fs.readFileSync(file.fsPath, 'utf8');
-                // Check if this file imports the target file
-                if (content.includes(baseName) || content.includes(path.relative(path.dirname(file.fsPath), filePath))) {
-                    related.push(file.fsPath);
+            }
+            else if (lowerLine.includes('finding')) {
+                currentSection = 'findings';
+                continue;
+            }
+            else if (lowerLine.includes('recommendation')) {
+                currentSection = 'recommendations';
+                continue;
+            }
+            else if (lowerLine.includes('metric')) {
+                currentSection = 'metrics';
+                continue;
+            }
+            if (line.trim()) {
+                switch (currentSection) {
+                    case 'summary':
+                        if (line.length > 10 && !line.startsWith('#')) {
+                            result.summary = line.trim();
+                        }
+                        break;
+                    case 'findings':
+                        if (line.startsWith('-') || line.startsWith('•')) {
+                            if (currentFinding.message) {
+                                result.findings.push({
+                                    severity: currentFinding.severity || 'medium',
+                                    category: currentFinding.category || 'general',
+                                    message: currentFinding.message || 'Issue found',
+                                    description: currentFinding.description || 'No description',
+                                    location: currentFinding.location || {
+                                        file: request.target,
+                                        line: 1
+                                    }
+                                });
+                            }
+                            currentFinding = {
+                                message: line.substring(1).trim(),
+                                severity: 'medium',
+                                category: 'general'
+                            };
+                        }
+                        break;
+                    case 'recommendations':
+                        if (line.startsWith('-') || line.startsWith('•')) {
+                            if (currentRecommendation.title) {
+                                result.recommendations.push({
+                                    type: currentRecommendation.type || 'best_practice',
+                                    priority: currentRecommendation.priority || 'medium',
+                                    title: currentRecommendation.title || 'Improvement',
+                                    description: currentRecommendation.description || 'No description',
+                                    implementation: currentRecommendation.implementation || 'No implementation details',
+                                    benefits: currentRecommendation.benefits || ['Improved code quality'],
+                                    estimated_effort: currentRecommendation.estimated_effort || 'medium',
+                                    impact: currentRecommendation.impact || 'medium'
+                                });
+                            }
+                            currentRecommendation = {
+                                title: line.substring(1).trim(),
+                                type: 'best_practice',
+                                priority: 'medium'
+                            };
+                        }
+                        break;
                 }
             }
-            catch (error) {
-                // Ignore files we can't read
-            }
         }
-        return related;
-    }
-    /**
-     * Identify key files in the project
-     */
-    identifyKeyFiles(structure) {
-        const keyFiles = [];
-        // Look for entry points
-        const entryPoints = [
-            'index.ts', 'index.js', 'main.ts', 'main.js', 'app.ts', 'app.js',
-            'server.ts', 'server.js', 'extension.ts'
-        ];
-        for (const file of structure.files) {
-            const basename = path.basename(file);
-            // Add entry points
-            if (entryPoints.includes(basename)) {
-                keyFiles.push(file);
-            }
-            // Add configuration files
-            if (basename.includes('config') || basename.includes('settings')) {
-                keyFiles.push(file);
-            }
-            // Add test files
-            if (basename.includes('.test.') || basename.includes('.spec.')) {
-                keyFiles.push(file);
-            }
+        // Add the last finding/recommendation
+        if (currentFinding.message) {
+            result.findings.push({
+                severity: currentFinding.severity || 'medium',
+                category: currentFinding.category || 'general',
+                message: currentFinding.message || 'Issue found',
+                description: currentFinding.description || 'No description',
+                location: currentFinding.location || {
+                    file: request.target,
+                    line: 1
+                }
+            });
         }
-        return keyFiles;
+        if (currentRecommendation.title) {
+            result.recommendations.push({
+                type: currentRecommendation.type || 'best_practice',
+                priority: currentRecommendation.priority || 'medium',
+                title: currentRecommendation.title || 'Improvement',
+                description: currentRecommendation.description || 'No description',
+                implementation: currentRecommendation.implementation || 'No implementation details',
+                benefits: currentRecommendation.benefits || ['Improved code quality'],
+                estimated_effort: currentRecommendation.estimated_effort || 'medium',
+                impact: currentRecommendation.impact || 'medium'
+            });
+        }
+        return result;
     }
-    /**
-     * Detect programming language from file extension
-     */
-    detectLanguage(filePath) {
-        const ext = path.extname(filePath).toLowerCase();
+    isCodeFile(filename) {
+        const codeExtensions = ['.js', '.ts', '.jsx', '.tsx', '.py', '.java', '.cpp', '.c', '.cs', '.php', '.rb', '.go', '.rs', '.swift', '.kt'];
+        return codeExtensions.some(ext => filename.endsWith(ext));
+    }
+    getLanguageFromExtension(ext) {
         const languageMap = {
-            '.ts': 'typescript',
             '.js': 'javascript',
-            '.tsx': 'typescript',
+            '.ts': 'typescript',
             '.jsx': 'javascript',
+            '.tsx': 'typescript',
             '.py': 'python',
             '.java': 'java',
-            '.c': 'c',
             '.cpp': 'cpp',
+            '.c': 'c',
             '.cs': 'csharp',
-            '.go': 'go',
-            '.rs': 'rust',
             '.php': 'php',
             '.rb': 'ruby',
+            '.go': 'go',
+            '.rs': 'rust',
             '.swift': 'swift',
             '.kt': 'kotlin'
         };
         return languageMap[ext] || 'unknown';
     }
-    /**
-     * Detect framework from dependencies
-     */
-    detectFramework(dependencies) {
-        const frameworks = {
-            'react': 'React',
-            'vue': 'Vue.js',
-            'angular': 'Angular',
-            'express': 'Express.js',
-            'fastify': 'Fastify',
-            'next': 'Next.js',
-            'nuxt': 'Nuxt.js',
-            'svelte': 'Svelte',
-            'ember': 'Ember.js'
-        };
-        for (const dep of dependencies) {
-            for (const [key, framework] of Object.entries(frameworks)) {
-                if (dep.includes(key)) {
-                    return framework;
-                }
-            }
+    inferProjectType(configFiles) {
+        if (configFiles.includes('package.json')) {
+            return 'node_project';
         }
-        return 'Unknown';
+        else if (configFiles.includes('tsconfig.json')) {
+            return 'typescript_project';
+        }
+        else if (configFiles.includes('webpack.config.js') || configFiles.includes('vite.config.js')) {
+            return 'web_frontend';
+        }
+        return 'unknown';
     }
-    /**
-     * Scan directory structure recursively
-     */
-    async scanDirectory(dirPath, structure, currentDepth, maxDepth) {
-        if (currentDepth >= maxDepth)
-            return;
+    estimateLineCount(target) {
         try {
-            const items = fs.readdirSync(dirPath);
-            for (const item of items) {
-                const fullPath = path.join(dirPath, item);
-                const stat = fs.statSync(fullPath);
-                if (stat.isDirectory()) {
-                    if (!item.startsWith('.') && item !== 'node_modules') {
-                        structure.directories.push(fullPath);
-                        await this.scanDirectory(fullPath, structure, currentDepth + 1, maxDepth);
-                    }
-                }
-                else if (stat.isFile()) {
-                    const ext = path.extname(item);
-                    if (['.ts', '.js', '.tsx', '.jsx', '.py', '.java', '.c', '.cpp'].includes(ext)) {
-                        structure.files.push(fullPath);
-                    }
-                }
+            if (fs.existsSync(target)) {
+                const content = fs.readFileSync(target, 'utf-8');
+                return content.split('\n').length;
             }
         }
         catch (error) {
-            // Ignore directories we can't read
+            // Ignore errors
         }
-    }
-    /**
-     * Extract basic code elements (simplified implementations)
-     */
-    extractDependencies(content, language) {
-        const deps = [];
-        if (language === 'typescript' || language === 'javascript') {
-            // Extract from import statements
-            const importMatches = content.match(/import .* from ['"]([^'"]+)['"]/g);
-            if (importMatches) {
-                importMatches.forEach(match => {
-                    const dep = match.match(/from ['"]([^'"]+)['"]/)?.[1];
-                    if (dep && !dep.startsWith('.')) {
-                        deps.push(dep);
-                    }
-                });
-            }
-        }
-        return [...new Set(deps)];
-    }
-    extractImports(content, language) {
-        const imports = [];
-        if (language === 'typescript' || language === 'javascript') {
-            const importMatches = content.match(/import .* from ['"]([^'"]+)['"]/g);
-            if (importMatches) {
-                imports.push(...importMatches);
-            }
-        }
-        return imports;
-    }
-    extractExports(content, language) {
-        const exports = [];
-        if (language === 'typescript' || language === 'javascript') {
-            const exportMatches = content.match(/export .*/g);
-            if (exportMatches) {
-                exports.push(...exportMatches);
-            }
-        }
-        return exports;
-    }
-    extractFunctions(content, language) {
-        const functions = [];
-        if (language === 'typescript' || language === 'javascript') {
-            // Simple function extraction - could be enhanced with proper parsing
-            const functionMatches = content.match(/(?:function\s+|const\s+\w+\s*=\s*(?:async\s+)?(?:\(.*?\)\s*=>|\function))\s*(\w+)/g);
-            if (functionMatches) {
-                functionMatches.forEach((match, index) => {
-                    functions.push({
-                        name: match.split(/\s+/)[1] || `function_${index}`,
-                        parameters: [],
-                        returnType: 'unknown',
-                        line: 0
-                    });
-                });
-            }
-        }
-        return functions;
-    }
-    extractClasses(content, language) {
-        const classes = [];
-        if (language === 'typescript' || language === 'javascript') {
-            const classMatches = content.match(/class\s+(\w+)/g);
-            if (classMatches) {
-                classMatches.forEach(match => {
-                    const className = match.split(/\s+/)[1];
-                    classes.push({
-                        name: className,
-                        implements: [],
-                        methods: [],
-                        properties: [],
-                        line: 0
-                    });
-                });
-            }
-        }
-        return classes;
-    }
-    extractInterfaces(content, language) {
-        const interfaces = [];
-        if (language === 'typescript') {
-            const interfaceMatches = content.match(/interface\s+(\w+)/g);
-            if (interfaceMatches) {
-                interfaceMatches.forEach(match => {
-                    const interfaceName = match.split(/\s+/)[1];
-                    interfaces.push({
-                        name: interfaceName,
-                        extends: [],
-                        properties: [],
-                        methods: [],
-                        line: 0
-                    });
-                });
-            }
-        }
-        return interfaces;
-    }
-    extractTypes(content, language) {
-        const types = [];
-        if (language === 'typescript') {
-            const typeMatches = content.match(/type\s+(\w+)\s*=/g);
-            if (typeMatches) {
-                typeMatches.forEach(match => {
-                    const typeName = match.split(/\s+/)[1];
-                    types.push({
-                        name: typeName,
-                        definition: 'unknown',
-                        line: 0
-                    });
-                });
-            }
-        }
-        return types;
-    }
-    /**
-     * Parse findings from AI response
-     */
-    parseFindings(findingsData) {
-        return findingsData.map(finding => ({
-            type: finding.type || 'info',
-            category: finding.category || 'general',
-            severity: finding.severity || 'medium',
-            message: finding.message || 'No message',
-            location: {
-                file: finding.location?.file || '',
-                line: finding.location?.line || 0,
-                column: finding.location?.column
-            },
-            description: finding.description || finding.message || 'No description',
-            examples: finding.examples || []
-        }));
-    }
-    /**
-     * Parse recommendations from AI response
-     */
-    parseRecommendations(recommendationsData) {
-        return recommendationsData.map(rec => ({
-            type: rec.type || 'improvement',
-            priority: rec.priority || 'medium',
-            title: rec.title || 'Recommendation',
-            description: rec.description || 'No description',
-            implementation: rec.implementation || 'No implementation details',
-            estimated_effort: rec.estimated_effort || 'medium',
-            benefits: rec.benefits || []
-        }));
-    }
-    /**
-     * Calculate basic code metrics
-     */
-    calculateMetrics(context) {
-        let totalLines = 0;
-        let totalComplexity = 0;
-        context.forEach(ctx => {
-            totalLines += ctx.content.split('\n').length;
-            totalComplexity += this.calculateCyclomaticComplexity(ctx.content);
-        });
-        return {
-            lines_of_code: totalLines,
-            cyclomatic_complexity: totalComplexity,
-            maintainability_index: Math.max(0, 171 - 5.2 * Math.log(totalLines) - 0.23 * totalComplexity),
-            technical_debt: totalComplexity > 50 ? totalComplexity * 0.1 : 0
-        };
-    }
-    /**
-     * Calculate cyclomatic complexity (simplified)
-     */
-    calculateCyclomaticComplexity(content) {
-        let complexity = 1; // Base complexity
-        // Count decision points
-        const decisionPatterns = [
-            /if\s*\(/g,
-            /else\s+if\s*\(/g,
-            /while\s*\(/g,
-            /for\s*\(/g,
-            /do\s*{/g,
-            /switch\s*\(/g,
-            /case\s+/g,
-            /catch\s*\(/g,
-            /&&/g,
-            /\|\|/g,
-            /\?/g // Ternary operator
-        ];
-        decisionPatterns.forEach(pattern => {
-            const matches = content.match(pattern);
-            if (matches) {
-                complexity += matches.length;
-            }
-        });
-        return complexity;
-    }
-    /**
-     * Fallback analysis when AI analysis fails
-     */
-    fallbackAnalysis(request, context) {
-        const findings = [];
-        const recommendations = [];
-        // Basic static analysis
-        context.forEach(ctx => {
-            // Check for long functions
-            ctx.functions.forEach(func => {
-                if (func.name.length > 200) { // Assuming function length check
-                    findings.push({
-                        type: 'warning',
-                        category: 'maintainability',
-                        severity: 'medium',
-                        message: `Function ${func.name} is too long`,
-                        location: { file: ctx.file, line: func.line },
-                        description: 'Long functions are harder to understand and maintain'
-                    });
-                }
-            });
-            // Check for missing documentation
-            if (ctx.functions.length > 0 && ctx.functions.filter(f => f.documentation).length === 0) {
-                recommendations.push({
-                    type: 'documentation',
-                    priority: 'medium',
-                    title: 'Add function documentation',
-                    description: 'Functions lack proper documentation',
-                    implementation: 'Add JSDoc comments to all functions',
-                    estimated_effort: 'small',
-                    benefits: ['Improved code understanding', 'Better maintenance']
-                });
-            }
-        });
-        return {
-            summary: 'Basic static analysis completed',
-            findings,
-            recommendations,
-            metrics: this.calculateMetrics(context),
-            context,
-            confidence: 0.6
-        };
+        return 0;
     }
 }
 exports.ContextAwareCodeAnalyzer = ContextAwareCodeAnalyzer;

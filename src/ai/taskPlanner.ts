@@ -1,637 +1,357 @@
-import * as vscode from 'vscode';
-import { Provider, ChatMessage } from '../providers/base';
+/**
+ * AI Task Planner for breaking down complex objectives into actionable tasks
+ */
+
+import { Provider } from '../providers/base';
 import { ModelRouter } from '../router';
+
+export interface TaskPlanRequest {
+  objective: string;
+  context: {
+    projectType?: string;
+    language?: string;
+    framework?: string;
+    constraints?: string[];
+  };
+  preferences: {
+    qualityLevel: 'fast' | 'balanced' | 'thorough';
+    maxTasks?: number;
+    estimatedTimeTotal?: number;
+  };
+}
 
 export interface Task {
   id: string;
   title: string;
   description: string;
-  type: 'analysis' | 'generation' | 'modification' | 'verification' | 'research';
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'blocked';
-  priority: number; // 1-10
-  estimatedTime: number; // minutes
-  dependencies: string[]; // task IDs
-  context: {
-    files?: string[];
-    code?: string;
-    requirements?: string[];
-    constraints?: string[];
-  };
-  result?: TaskResult;
-  assignedModel?: string;
-  createdAt: Date;
-  completedAt?: Date;
-  metadata?: Record<string, any>;
-}
-
-export interface TaskResult {
-  success: boolean;
-  output: string;
-  files?: { path: string; content: string }[];
-  metrics?: {
-    executionTime: number;
-    tokenUsage: number;
-    cost: number;
-  };
-  confidence?: number;
-  suggestions?: string[];
-  errors?: string[];
+  estimatedTime: number; // in minutes
+  dependencies: string[];
+  priority: 'low' | 'medium' | 'high';
+  category: string;
+  subtasks?: Task[];
 }
 
 export interface TaskPlan {
   id: string;
   title: string;
   description: string;
+  objective: string;
   tasks: Task[];
-  status: 'draft' | 'approved' | 'executing' | 'completed' | 'failed';
-  totalEstimate: number;
+  totalEstimatedTime: number;
   createdAt: Date;
-  metadata?: Record<string, any>;
+  status: 'draft' | 'active' | 'completed';
+  metadata: {
+    qualityLevel: string;
+    projectType: string;
+    language: string;
+  };
 }
 
-export interface PlanningRequest {
-  objective: string;
-  context: {
-    projectType?: string;
-    language?: string;
-    framework?: string;
-    files?: string[];
-    constraints?: string[];
-    requirements?: string[];
-  };
-  preferences?: {
-    maxTasks?: number;
-    timeLimit?: number;
-    preferredModels?: string[];
-    qualityLevel?: 'fast' | 'balanced' | 'thorough';
-  };
+export interface TaskExecutionResult {
+  taskId: string;
+  status: 'success' | 'failure' | 'partial';
+  result: string;
+  artifacts: string[];
+  duration: number;
+  confidence: number;
 }
 
 export class AITaskPlanner {
   private router: ModelRouter;
   private providers: Map<string, Provider>;
   private activePlans: Map<string, TaskPlan> = new Map();
-  private executionQueue: Task[] = [];
 
   constructor(router: ModelRouter, providers: Map<string, Provider>) {
     this.router = router;
     this.providers = providers;
   }
 
-  /**
-   * Create a comprehensive plan for achieving an objective
-   */
-  async createPlan(request: PlanningRequest): Promise<TaskPlan> {
+  async createPlan(request: TaskPlanRequest): Promise<TaskPlan> {
     const planningPrompt = this.buildPlanningPrompt(request);
     
     try {
-      const result = await this.router.route({
+      const routingResult = await this.router.route({
         prompt: planningPrompt,
+        lang: 'de',
         mode: 'quality'
       });
 
-      const provider = this.providers.get(result.providerId);
-      if (!provider) {
-        throw new Error(`Provider ${result.providerId} not found`);
-      }
+      const result = await routingResult.provider.chatComplete(
+        routingResult.modelName,
+        [{ role: 'user', content: planningPrompt }],
+        { 
+          maxTokens: 2000,
+          temperature: 0.3 // Lower temperature for more consistent planning
+        }
+      );
 
-      const messages: ChatMessage[] = [
-        { role: 'user', content: planningPrompt }
-      ];
-
-      const response = await provider.chatComplete(result.modelName, messages, {
-        maxTokens: 4000,
-        temperature: 0.3,
-        json: true
-      });
-
-      const planData = JSON.parse(response.content);
-      const plan = this.parsePlanFromResponse(planData, request);
-      
+      const plan = this.parsePlanFromResponse(result.content, request);
       this.activePlans.set(plan.id, plan);
+      
       return plan;
-
     } catch (error) {
-      console.error('Plan creation failed:', error);
-      return this.createFallbackPlan(request);
+      throw new Error(`Task planning failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
-  /**
-   * Execute a task plan step by step
-   */
-  async executePlan(planId: string, progressCallback?: (task: Task, progress: number) => void): Promise<TaskPlan> {
+  async executePlan(planId: string): Promise<TaskExecutionResult[]> {
     const plan = this.activePlans.get(planId);
     if (!plan) {
       throw new Error(`Plan ${planId} not found`);
     }
 
-    plan.status = 'executing';
-    
-    // Sort tasks by dependencies and priority
-    const sortedTasks = this.sortTasksByDependencies(plan.tasks);
-    
-    for (let i = 0; i < sortedTasks.length; i++) {
-      const task = sortedTasks[i];
+    const results: TaskExecutionResult[] = [];
+    const executedTasks = new Set<string>();
+
+    // Execute tasks in dependency order
+    for (const task of this.getExecutionOrder(plan.tasks)) {
+      const result = await this.executeTask(task, plan, executedTasks);
+      results.push(result);
       
-      // Check if dependencies are satisfied
-      if (!this.areDependenciesSatisfied(task, plan)) {
-        task.status = 'blocked';
-        continue;
-      }
-
-      task.status = 'running';
-      progressCallback?.(task, (i / sortedTasks.length) * 100);
-
-      try {
-        const result = await this.executeTask(task, plan);
-        task.result = result;
-        task.status = result.success ? 'completed' : 'failed';
-        task.completedAt = new Date();
-      } catch (error) {
-        task.result = {
-          success: false,
-          output: `Task execution failed: ${error instanceof Error ? error.message : String(error)}`,
-          errors: [error instanceof Error ? error.message : String(error)]
-        };
-        task.status = 'failed';
+      if (result.status === 'success') {
+        executedTasks.add(task.id);
       }
     }
 
-    // Update plan status
-    const completedTasks = plan.tasks.filter(t => t.status === 'completed').length;
-    const failedTasks = plan.tasks.filter(t => t.status === 'failed').length;
-    
-    if (completedTasks === plan.tasks.length) {
-      plan.status = 'completed';
-    } else if (failedTasks > 0) {
-      plan.status = 'failed';
-    }
-
-    return plan;
+    return results;
   }
 
-  /**
-   * Execute a single task
-   */
-  private async executeTask(task: Task, plan: TaskPlan): Promise<TaskResult> {
+  async executeTask(task: Task, plan: TaskPlan, completedTasks: Set<string>): Promise<TaskExecutionResult> {
     const startTime = Date.now();
-    
-    // Build task execution prompt
-    const taskPrompt = this.buildTaskPrompt(task, plan);
-    
-    // Select appropriate model for task type
-    const modelId = this.selectModelForTask(task);
-    
-    try {
-      const result = await this.router.route({
-        prompt: taskPrompt,
-        mode: this.getRoutingModeForTask(task)
-      });
 
-      const provider = this.providers.get(result.providerId);
-      if (!provider) {
-        throw new Error(`Provider ${result.providerId} not found`);
+    // Check dependencies
+    for (const depId of task.dependencies) {
+      if (!completedTasks.has(depId)) {
+        return {
+          taskId: task.id,
+          status: 'failure',
+          result: `Dependency ${depId} not completed`,
+          artifacts: [],
+          duration: Date.now() - startTime,
+          confidence: 0
+        };
       }
+    }
 
-      // Use specific model if available, otherwise use routed model
-      const actualModel = modelId && provider.supports(modelId) ? modelId : result.modelName;
+    const executionPrompt = this.buildExecutionPrompt(task, plan);
 
-      const messages: ChatMessage[] = [
-        { role: 'user', content: taskPrompt }
-      ];
-
-      const response = await provider.chatComplete(actualModel, messages, {
-        maxTokens: this.getMaxTokensForTask(task),
-        temperature: this.getTemperatureForTask(task)
+    try {
+      const routingResult = await this.router.route({
+        prompt: executionPrompt,
+        lang: 'de',
+        mode: plan.metadata.qualityLevel === 'fast' ? 'speed' : 'quality'
       });
 
-      const executionTime = Date.now() - startTime;
-
-      // Parse response based on task type
-      const parsedResult = this.parseTaskResult(response.content, task);
+      const result = await routingResult.provider.chatComplete(
+        routingResult.modelName,
+        [{ role: 'user', content: executionPrompt }],
+        { 
+          maxTokens: 1500,
+          temperature: 0.5
+        }
+      );
 
       return {
-        success: true,
-        output: parsedResult.output,
-        files: parsedResult.files,
-        metrics: {
-          executionTime,
-          tokenUsage: (response.usage?.inputTokens || 0) + (response.usage?.outputTokens || 0),
-          cost: this.calculateTaskCost(response.usage?.inputTokens || 0, response.usage?.outputTokens || 0, result.model)
-        },
-        confidence: parsedResult.confidence,
-        suggestions: parsedResult.suggestions
+        taskId: task.id,
+        status: 'success',
+        result: result.content,
+        artifacts: this.extractArtifacts(result.content),
+        duration: Date.now() - startTime,
+        confidence: 0.8
       };
-
     } catch (error) {
       return {
-        success: false,
-        output: `Task execution failed: ${error instanceof Error ? error.message : String(error)}`,
-        errors: [error instanceof Error ? error.message : String(error)],
-        metrics: {
-          executionTime: Date.now() - startTime,
-          tokenUsage: 0,
-          cost: 0
-        }
+        taskId: task.id,
+        status: 'failure',
+        result: `Execution failed: ${error instanceof Error ? error.message : String(error)}`,
+        artifacts: [],
+        duration: Date.now() - startTime,
+        confidence: 0
       };
     }
   }
 
-  /**
-   * Build comprehensive planning prompt
-   */
-  private buildPlanningPrompt(request: PlanningRequest): string {
-    return `
-You are an AI task planning expert. Create a detailed, executable plan to achieve the following objective:
+  private buildPlanningPrompt(request: TaskPlanRequest): string {
+    return `You are an expert AI task planner. Break down the following objective into a detailed, actionable plan.
 
 OBJECTIVE: ${request.objective}
 
 CONTEXT:
-${request.context.projectType ? `- Project Type: ${request.context.projectType}` : ''}
-${request.context.language ? `- Programming Language: ${request.context.language}` : ''}
-${request.context.framework ? `- Framework: ${request.context.framework}` : ''}
-${request.context.files?.length ? `- Relevant Files: ${request.context.files.join(', ')}` : ''}
-${request.context.constraints?.length ? `- Constraints: ${request.context.constraints.join(', ')}` : ''}
-${request.context.requirements?.length ? `- Requirements: ${request.context.requirements.join(', ')}` : ''}
+- Project Type: ${request.context.projectType || 'unknown'}
+- Programming Language: ${request.context.language || 'unknown'}
+- Framework: ${request.context.framework || 'unknown'}
+- Constraints: ${request.context.constraints?.join(', ') || 'none'}
 
 PREFERENCES:
-${request.preferences?.maxTasks ? `- Max Tasks: ${request.preferences.maxTasks}` : ''}
-${request.preferences?.timeLimit ? `- Time Limit: ${request.preferences.timeLimit} minutes` : ''}
-${request.preferences?.qualityLevel ? `- Quality Level: ${request.preferences.qualityLevel}` : ''}
+- Quality Level: ${request.preferences.qualityLevel}
+- Max Tasks: ${request.preferences.maxTasks || 'no limit'}
+- Time Estimate: ${request.preferences.estimatedTimeTotal || 'flexible'}
 
-Please create a comprehensive plan with the following structure:
+Please provide a structured plan with:
+1. Overall plan title and description
+2. Detailed task breakdown with:
+   - Task title and description
+   - Estimated time in minutes
+   - Dependencies (task IDs)
+   - Priority level
+   - Category
 
-{
-  "title": "Plan title",
-  "description": "Detailed plan description",
-  "tasks": [
-    {
-      "title": "Task title",
-      "description": "Detailed task description",
-      "type": "analysis|generation|modification|verification|research",
-      "priority": 1-10,
-      "estimatedTime": minutes,
-      "dependencies": ["task_id1", "task_id2"],
-      "context": {
-        "files": ["relevant files"],
-        "requirements": ["specific requirements"],
-        "constraints": ["specific constraints"]
-      },
-      "assignedModel": "recommended model for this task"
-    }
-  ],
-  "totalEstimate": total_minutes
-}
+Format your response as a structured list with clear task identifiers.
 
-Guidelines:
-1. Break down complex objectives into manageable tasks
-2. Establish clear dependencies between tasks
-3. Consider the order of execution
-4. Assign appropriate task types
-5. Provide realistic time estimates
-6. Include verification and testing tasks
-7. Consider error handling and fallback options
-`;
+Focus on creating actionable, specific tasks that can be executed by an AI assistant.`;
   }
 
-  /**
-   * Build task execution prompt
-   */
-  private buildTaskPrompt(task: Task, plan: TaskPlan): string {
-    let prompt = `
-TASK: ${task.title}
-DESCRIPTION: ${task.description}
-TYPE: ${task.type}
+  private buildExecutionPrompt(task: Task, plan: TaskPlan): string {
+    return `Execute the following task as part of a larger project plan.
+
+PROJECT: ${plan.title}
+OBJECTIVE: ${plan.objective}
+
+TASK TO EXECUTE:
+- Title: ${task.title}
+- Description: ${task.description}
+- Category: ${task.category}
+- Priority: ${task.priority}
 
 CONTEXT:
-- Plan: ${plan.title}
-- Plan Description: ${plan.description}
-`;
+- Project Type: ${plan.metadata.projectType}
+- Programming Language: ${plan.metadata.language}
+- Quality Level: ${plan.metadata.qualityLevel}
 
-    if (task.context.files?.length) {
-      prompt += `- Files: ${task.context.files.join(', ')}\n`;
+Please execute this task and provide:
+1. The completed work/solution
+2. Any code, documentation, or artifacts generated
+3. Testing or validation steps taken
+4. Next steps or recommendations
+
+Be thorough and ensure the output is production-ready.`;
+  }
+
+  private parsePlanFromResponse(response: string, request: TaskPlanRequest): TaskPlan {
+    // Simplified parsing - in a real implementation, this would be more sophisticated
+    const planId = `plan-${Date.now()}`;
+    const lines = response.split('\n');
+    
+    let title = 'Generated Plan';
+    let description = 'Auto-generated task plan';
+    const tasks: Task[] = [];
+    
+    let currentTask: Partial<Task> = {};
+    let taskCounter = 1;
+
+    for (const line of lines) {
+      if (line.toLowerCase().includes('title:')) {
+        title = line.split(':').slice(1).join(':').trim();
+      } else if (line.toLowerCase().includes('description:')) {
+        description = line.split(':').slice(1).join(':').trim();
+      } else if (line.match(/^\d+\./)) {
+        // New task
+        if (currentTask.title) {
+          tasks.push({
+            id: `task-${taskCounter}`,
+            title: currentTask.title || 'Untitled Task',
+            description: currentTask.description || 'No description',
+            estimatedTime: currentTask.estimatedTime || 30,
+            dependencies: currentTask.dependencies || [],
+            priority: currentTask.priority || 'medium',
+            category: currentTask.category || 'general'
+          });
+          taskCounter++;
+        }
+        
+        currentTask = {
+          title: line.replace(/^\d+\./, '').trim(),
+          description: '',
+          estimatedTime: 30,
+          dependencies: [],
+          priority: 'medium',
+          category: 'general'
+        };
+      }
     }
 
-    if (task.context.requirements?.length) {
-      prompt += `- Requirements: ${task.context.requirements.join(', ')}\n`;
+    // Add the last task
+    if (currentTask.title) {
+      tasks.push({
+        id: `task-${taskCounter}`,
+        title: currentTask.title || 'Untitled Task',
+        description: currentTask.description || 'No description',
+        estimatedTime: currentTask.estimatedTime || 30,
+        dependencies: currentTask.dependencies || [],
+        priority: currentTask.priority || 'medium',
+        category: currentTask.category || 'general'
+      });
     }
 
-    if (task.context.constraints?.length) {
-      prompt += `- Constraints: ${task.context.constraints.join(', ')}\n`;
-    }
+    return {
+      id: planId,
+      title,
+      description,
+      objective: request.objective,
+      tasks,
+      totalEstimatedTime: tasks.reduce((total, task) => total + task.estimatedTime, 0),
+      createdAt: new Date(),
+      status: 'draft',
+      metadata: {
+        qualityLevel: request.preferences.qualityLevel,
+        projectType: request.context.projectType || 'unknown',
+        language: request.context.language || 'unknown'
+      }
+    };
+  }
 
-    // Add dependency results
-    if (task.dependencies.length > 0) {
-      prompt += '\nDEPENDENCY RESULTS:\n';
+  private getExecutionOrder(tasks: Task[]): Task[] {
+    // Simple topological sort based on dependencies
+    const sorted: Task[] = [];
+    const visited = new Set<string>();
+    const visiting = new Set<string>();
+
+    const visit = (task: Task) => {
+      if (visiting.has(task.id)) {
+        throw new Error(`Circular dependency detected involving task ${task.id}`);
+      }
+      if (visited.has(task.id)) {
+        return;
+      }
+
+      visiting.add(task.id);
+      
       for (const depId of task.dependencies) {
-        const depTask = plan.tasks.find(t => t.id === depId);
-        if (depTask?.result?.success) {
-          prompt += `- ${depTask.title}: ${depTask.result.output.substring(0, 200)}...\n`;
+        const depTask = tasks.find(t => t.id === depId);
+        if (depTask) {
+          visit(depTask);
         }
       }
-    }
-
-    prompt += `
-Please execute this task and provide your result in the following format:
-
-{
-  "output": "Your main result/answer",
-  "files": [
-    {
-      "path": "file/path.ext",
-      "content": "file content"
-    }
-  ],
-  "confidence": 0.0-1.0,
-  "suggestions": ["suggestion1", "suggestion2"],
-  "nextSteps": ["next step recommendations"]
-}
-
-Focus on delivering a complete, high-quality result for this specific task.
-`;
-
-    return prompt;
-  }
-
-  /**
-   * Parse plan from AI response
-   */
-  private parsePlanFromResponse(planData: any, request: PlanningRequest): TaskPlan {
-    const planId = this.generateId();
-    
-    const tasks: Task[] = (planData.tasks || []).map((taskData: any, index: number) => ({
-      id: `task_${index + 1}`,
-      title: taskData.title || `Task ${index + 1}`,
-      description: taskData.description || '',
-      type: taskData.type || 'analysis',
-      status: 'pending',
-      priority: taskData.priority || 5,
-      estimatedTime: taskData.estimatedTime || 15,
-      dependencies: taskData.dependencies || [],
-      context: {
-        files: taskData.context?.files || [],
-        code: taskData.context?.code,
-        requirements: taskData.context?.requirements || [],
-        constraints: taskData.context?.constraints || []
-      },
-      assignedModel: taskData.assignedModel,
-      createdAt: new Date()
-    }));
-
-    return {
-      id: planId,
-      title: planData.title || request.objective,
-      description: planData.description || `Plan for: ${request.objective}`,
-      tasks,
-      status: 'draft',
-      totalEstimate: planData.totalEstimate || tasks.reduce((sum, task) => sum + task.estimatedTime, 0),
-      createdAt: new Date()
+      
+      visiting.delete(task.id);
+      visited.add(task.id);
+      sorted.push(task);
     };
-  }
 
-  /**
-   * Create fallback plan when AI planning fails
-   */
-  private createFallbackPlan(request: PlanningRequest): TaskPlan {
-    const planId = this.generateId();
-    
-    const tasks: Task[] = [
-      {
-        id: 'task_1',
-        title: 'Analysis',
-        description: `Analyze the objective: ${request.objective}`,
-        type: 'analysis',
-        status: 'pending',
-        priority: 8,
-        estimatedTime: 10,
-        dependencies: [],
-        context: {
-          requirements: [request.objective],
-          constraints: request.context.constraints || []
-        },
-        createdAt: new Date()
-      },
-      {
-        id: 'task_2',
-        title: 'Implementation',
-        description: 'Implement the solution based on analysis',
-        type: 'generation',
-        status: 'pending',
-        priority: 7,
-        estimatedTime: 30,
-        dependencies: ['task_1'],
-        context: {
-          requirements: request.context.requirements || [],
-          constraints: request.context.constraints || []
-        },
-        createdAt: new Date()
-      },
-      {
-        id: 'task_3',
-        title: 'Verification',
-        description: 'Verify and test the implementation',
-        type: 'verification',
-        status: 'pending',
-        priority: 6,
-        estimatedTime: 15,
-        dependencies: ['task_2'],
-        context: {},
-        createdAt: new Date()
+    for (const task of tasks) {
+      if (!visited.has(task.id)) {
+        visit(task);
       }
-    ];
-
-    return {
-      id: planId,
-      title: request.objective,
-      description: `Fallback plan for: ${request.objective}`,
-      tasks,
-      status: 'draft',
-      totalEstimate: 55,
-      createdAt: new Date()
-    };
-  }
-
-  /**
-   * Sort tasks by dependencies and priority
-   */
-  private sortTasksByDependencies(tasks: Task[]): Task[] {
-    const sorted: Task[] = [];
-    const remaining = [...tasks];
-    
-    while (remaining.length > 0) {
-      const readyTasks = remaining.filter(task => 
-        task.dependencies.every(depId => 
-          sorted.some(sortedTask => sortedTask.id === depId)
-        )
-      );
-      
-      if (readyTasks.length === 0) {
-        // Circular dependency or unresolvable - add all remaining
-        sorted.push(...remaining);
-        break;
-      }
-      
-      // Sort ready tasks by priority (higher first)
-      readyTasks.sort((a, b) => b.priority - a.priority);
-      
-      // Add highest priority task
-      const nextTask = readyTasks[0];
-      sorted.push(nextTask);
-      remaining.splice(remaining.indexOf(nextTask), 1);
     }
-    
+
     return sorted;
   }
 
-  /**
-   * Check if task dependencies are satisfied
-   */
-  private areDependenciesSatisfied(task: Task, plan: TaskPlan): boolean {
-    return task.dependencies.every(depId => {
-      const depTask = plan.tasks.find(t => t.id === depId);
-      return depTask?.status === 'completed';
-    });
-  }
-
-  /**
-   * Select appropriate model for task type
-   */
-  private selectModelForTask(task: Task): string | undefined {
-    if (task.assignedModel) {
-      return task.assignedModel;
-    }
-
-    const modelMap: Record<string, string> = {
-      'analysis': 'gpt-4',
-      'generation': 'claude-3-sonnet',
-      'modification': 'gpt-4',
-      'verification': 'claude-3-haiku',
-      'research': 'gpt-4'
-    };
-
-    return modelMap[task.type];
-  }
-
-  /**
-   * Get routing mode for task type
-   */
-  private getRoutingModeForTask(task: Task): string {
-    const modeMap: Record<string, string> = {
-      'analysis': 'quality',
-      'generation': 'auto',
-      'modification': 'quality',
-      'verification': 'speed',
-      'research': 'quality'
-    };
-
-    return modeMap[task.type] || 'auto';
-  }
-
-  /**
-   * Get max tokens for task type
-   */
-  private getMaxTokensForTask(task: Task): number {
-    const tokenMap: Record<string, number> = {
-      'analysis': 2000,
-      'generation': 4000,
-      'modification': 3000,
-      'verification': 1500,
-      'research': 3000
-    };
-
-    return tokenMap[task.type] || 2000;
-  }
-
-  /**
-   * Get temperature for task type
-   */
-  private getTemperatureForTask(task: Task): number {
-    const tempMap: Record<string, number> = {
-      'analysis': 0.3,
-      'generation': 0.7,
-      'modification': 0.5,
-      'verification': 0.2,
-      'research': 0.6
-    };
-
-    return tempMap[task.type] || 0.5;
-  }
-
-  /**
-   * Parse task result from AI response
-   */
-  private parseTaskResult(content: string, task: Task): {
-    output: string;
-    files?: { path: string; content: string }[];
-    confidence?: number;
-    suggestions?: string[];
-  } {
-    try {
-      const parsed = JSON.parse(content);
-      return {
-        output: parsed.output || content,
-        files: parsed.files || [],
-        confidence: parsed.confidence || 0.7,
-        suggestions: parsed.suggestions || []
-      };
-    } catch {
-      return {
-        output: content,
-        confidence: 0.6
-      };
-    }
-  }
-
-  /**
-   * Calculate task execution cost
-   */
-  private calculateTaskCost(inputTokens: number, outputTokens: number, model: any): number {
-    const inputCostPer1k = model?.price?.inputPerMTok ? model.price.inputPerMTok / 1000 : 0.001;
-    const outputCostPer1k = model?.price?.outputPerMTok ? model.price.outputPerMTok / 1000 : 0.002;
+  private extractArtifacts(content: string): string[] {
+    const artifacts: string[] = [];
     
-    return (inputTokens / 1000 * inputCostPer1k) + (outputTokens / 1000 * outputCostPer1k);
-  }
-
-  /**
-   * Generate unique ID
-   */
-  private generateId(): string {
-    return `plan_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  }
-
-  /**
-   * Get active plans
-   */
-  getActivePlans(): TaskPlan[] {
-    return Array.from(this.activePlans.values());
-  }
-
-  /**
-   * Get plan by ID
-   */
-  getPlan(planId: string): TaskPlan | undefined {
-    return this.activePlans.get(planId);
-  }
-
-  /**
-   * Cancel plan execution
-   */
-  cancelPlan(planId: string): boolean {
-    const plan = this.activePlans.get(planId);
-    if (plan && plan.status === 'executing') {
-      plan.status = 'failed';
-      // Mark running tasks as failed
-      plan.tasks.filter(t => t.status === 'running').forEach(t => {
-        t.status = 'failed';
-        t.result = {
-          success: false,
-          output: 'Task cancelled by user',
-          errors: ['Execution cancelled']
-        };
-      });
-      return true;
+    // Look for code blocks
+    const codeBlocks = content.match(/```[\s\S]*?```/g);
+    if (codeBlocks) {
+      artifacts.push(...codeBlocks);
     }
-    return false;
+    
+    // Look for file paths or names
+    const filePaths = content.match(/[a-zA-Z0-9_-]+\.[a-zA-Z0-9]+/g);
+    if (filePaths) {
+      artifacts.push(...filePaths);
+    }
+    
+    return artifacts;
   }
 }
