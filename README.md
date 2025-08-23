@@ -1,109 +1,113 @@
-# Model Router für VSCode/Cursor mit Guido Voice Control 🎤
+# 🎤 Guido Model Router - Intelligente AI-Modell-Auswahl mit Sprachsteuerung
 
-> Sprache / Language: **Deutsch** | [English](./README.en.md)
+**Guido** ist eine fortschrittliche VSCode/Cursor Extension für intelligente AI-Modell-Auswahl mit experimenteller Sprachsteuerung und erweiterten Features.
 
-<!-- TOC START -->
-<!-- TOC END -->
+## ✨ Features
 
-Eine intelligente VSCode-Extension, die **automatisch das optimale KI-Modell** für jede Aufgabe auswählt. Mit **vollständiger Sprachsteuerung "Guido"**, Unterstützung für OpenAI, DeepSeek, Grok, Phi, Ollama und anderen Providern.
+### 🎯 Intelligente Modell-Auswahl
+- **Automatisches Routing** basierend auf Prompt-Inhalt und Kontext
+- **Kostenbewusste Auswahl** mit Budget-Management
+- **Performance-basierte Optimierung** mit adaptivem Lernen
+- **Multi-Provider Support** (OpenAI, DeepSeek, Grok, Phi, Ollama)
 
-## 🎯 Features
+### 🎤 Sprachsteuerung "Guido"
+- **Wake Word Detection** ("Guido" als Aktivierungswort)
+- **Voice Commands** für alle Extension-Features
+- **Sprachausgabe** (außer Code)
+- **Mehrsprachige Unterstützung** (DE, EN, FR, ES, IT, PT, NL, PL, RU)
+- **Emotionale Erkennung** und kontextbewusste Antworten
 
-### ⚡ Intelligentes Routing
+### 🧪 Experimentelle Features
+- **Emotionale Erkennung** aus Voice-Input
+- **Kontextbewusstsein** mit Projekt- und Datei-Analyse
+- **Adaptive Interface** basierend auf Benutzerverhalten
+- **Persönlichkeitsanpassung** für individuelle Kommunikation
+- **Mehrschichtige Intent-Erkennung** für präzise Befehle
+- **Konversationsgedächtnis** für kontinuierliche Verbesserung
 
-- Automatische Modellauswahl (Prompt-Inhalt, Dateityp, Kontext)
-- Regelbasiertes System + optionaler LLM-Classifier
-- Fallback-Mechanismen (Ausfälle, Rate Limits)
-
-### 🌐 Multi-Provider-Unterstützung
-
-- OpenAI (GPT‑4o, GPT‑4o-mini, GPT‑4.1)
-- DeepSeek (v3, r1 Reasoning)
-- Grok (xAI)
-- Microsoft Phi (4, 4-mini)
-- Ollama (lokal: Llama, Qwen, CodeLlama)
-- Beliebige OpenAI-kompatible APIs
-
-### 💰 Kostenbewusstsein
-
-- Live-Kostenschätzung vor Ausführung
-- Budget (Tag/Monat) + Hard-Stop + Warnschwelle
-- Ausgaben-Tracking & Statistiken
-- Preisvergleich je Modell
-
-### 🔒 Sicherheit & Datenschutz
-
-- Sichere SecretStorage API-Key Ablage
-- Privacy-Modi: `privacy-strict`, `local-only`, `offline`
-- Redaktions-Filter & Pfad-Regeln
-- Keine Klartext-Speicherung sensibler Werte
-
-### 🎨 UI & Bedienung
-
-- Floating Chat Panel & Dock-View (synchron)
-- Model Override Dropdown
-- Anhänge-Zusammenfassung + Secret-Redaktion
-- Kosten-Footer (tatsächliche Usage)
-- Tools-Menü (Simulation, Budget, Resend, Clear)
-- Plan / Agent: Plan erzeugen & Schritte sequenziell ausführen (Streaming & Abbruch)
-- Statusbar: Modus, Budget, Plan-Fortschritt `$(sync~spin) Plan 2/5`
-- Voice-State Indikator (idle/listening/recording/processing)
-- QuickPrompt Kompaktmodus
-- Vollständige Command-Palette Integration
+### 🔧 Erweiterte Konfiguration
+- **YAML-basierte Konfiguration** für maximale Flexibilität
+- **Sichere API-Key-Verwaltung** mit VSCode SecretStorage
+- **GDPR-konforme Datenschutz-Einstellungen**
+- **Umfangreiche Voice-Einstellungen** und Berechtigungen
 
 ## 🚀 Installation
 
-### 1. Voraussetzungen
-
-- VSCode 1.90.0+
-- Node.js 20+
-- Optional: Ollama für lokale Modelle
-
-### 2. Entwicklungsversion
-
+### Automatische Installation
 ```bash
-git clone <repository-url>
-cd model-router
-npm install
-npm run compile
-# F5 in VSCode (Run Extension)
+# In VSCode/Cursor Terminal
+code --install-extension model-router-0.1.7.vsix
+cursor --install-extension model-router-0.1.7.vsix
 ```
 
-### 3. Aus VSIX
+### Manuelle Installation
+1. **Extension herunterladen** und in VSCode/Cursor installieren
+2. **Workspace öffnen** (für Konfiguration)
+3. **API-Keys konfigurieren** über Command Palette
+4. **Sprachsteuerung aktivieren** mit "Model Router: Start Voice Control"
 
+## 🎯 Schnellstart
+
+### 1. Grundlegende Nutzung
 ```bash
-npm run package
-# VSCode: Extensions: Install from VSIX
+# Command Palette öffnen (Ctrl+Shift+P)
+# "Model Router: Chat" auswählen
+# Prompt eingeben: "Erkläre mir TypeScript"
 ```
 
-### 4. Struktur
-
-```text
-workspace/
-├── router.config.yaml
-└── .vscode/settings.json
+### 2. Sprachsteuerung aktivieren
+```bash
+# "Model Router: Start Voice Control (Guido)" ausführen
+# "Guido" sagen (leiser Beep)
+# Befehl sprechen: "Erkläre mir diesen Code"
+# "Stop" sagen
 ```
+
+### 3. Experimentelle Features testen
+```bash
+# "🧪 Experimental: Show UI" ausführen
+# Verschiedene experimentelle Features testen
+# "🧪 Experimental: Test All Features" für vollständigen Test
+```
+
+## 🎤 Voice Commands
+
+### System-Befehle
+- **"Guido, starte Sprachsteuerung"** - Voice Control aktivieren
+- **"Guido, stoppe Sprachsteuerung"** - Voice Control deaktivieren
+- **"Guido, Einstellungen öffnen"** - Voice-Einstellungen anzeigen
+
+### Entwicklungs-Befehle
+- **"Guido, erkläre mir diesen Code"** - Code-Erklärung
+- **"Guido, generiere Tests für diese Funktion"** - Test-Generierung
+- **"Guido, optimiere diesen Code"** - Code-Optimierung
+- **"Guido, finde Bugs in diesem Code"** - Bug-Detection
+
+### Experimentelle Befehle
+- **"Guido, teste Emotion-Erkennung"** - Emotion-Analyse
+- **"Guido, analysiere Kontext"** - Kontext-Analyse
+- **"Guido, erkenne Intent"** - Intent-Erkennung
+- **"Guido, adaptive Antwort"** - Adaptive Antworten
 
 ## ⚙️ Konfiguration
 
-### Beispiel `router.config.yaml`
-
+### router.config.yaml
 ```yaml
 version: 1
 activeProfile: default
-
 profiles:
   default:
     mode: auto
-    budget:
-      dailyUSD: 2.50
-      monthlyUSD: 50
-      hardStop: true
-      warningThreshold: 80
-    privacy:
-      redactPaths: ["**/secrets/**", "**/.env*"]
-      stripFileContentOverKB: 256
-      allowExternal: true
+    voice:
+      enabled: true
+      wakeWord: "Guido"
+      language:
+        recognition: "de"
+        response: "de"
+      experimental:
+        enabled: true
+        emotionDetection: true
+        contextAwareness: true
     providers:
       - id: openai
         kind: openai-compat
@@ -112,274 +116,120 @@ profiles:
         models:
           - name: gpt-4o-mini
             context: 128000
-            caps: ["cheap","tools","json"]
-            price:
-              inputPerMTok: 0.15
-              outputPerMTok: 0.60
-      - id: ollama
-        kind: ollama
-        baseUrl: http://127.0.0.1:11434
-        models:
-          - name: llama3.3:70b-instruct
-            context: 32768
-            caps: ["local","long","tools"]
     routing:
       rules:
-        - id: cheap-tests
-          if:
-            anyKeyword: ["test","unit test","boilerplate"]
-            fileLangIn: ["ts","js","py"]
+        - id: default
+          if: {}
           then:
             prefer: ["openai:gpt-4o-mini"]
             target: chat
-        - id: privacy
-          if:
-            privacyStrict: true
-          then:
-            prefer: ["ollama:llama3.3:70b-instruct"]
-            target: chat
-      default:
-        prefer: ["openai:gpt-4o-mini","ollama:llama3.3:70b-instruct"]
-        target: chat
 ```
 
-### VSCode Settings (`settings.json`)
+## 🧪 Experimentelle Features
 
-```json
-{
-  "modelRouter.configPath": "${workspaceFolder}/router.config.yaml",
-  "modelRouter.mode": "auto",
-  "modelRouter.enablePromptClassifier": false
-}
+### Emotionale Erkennung
+- **Real-time Emotion Analysis** aus Voice-Input
+- **Adaptive Antworten** basierend auf erkannten Emotionen
+- **Visualisierung** der Emotionen in der UI
+
+### Kontextbewusstsein
+- **Projekt-Analyse** für bessere Modell-Auswahl
+- **Datei-Kontext** Integration
+- **Benutzer-Expertise** Erkennung
+- **Konversations-Historie** für kontinuierliche Verbesserung
+
+### Adaptive Interface
+- **Benutzerverhalten-basierte Anpassung**
+- **Expertise-Level Erkennung**
+- **Dynamische UI-Anpassung**
+- **Performance-basierte Optimierung**
+
+### Mehrsprachige Verarbeitung
+- **Automatische Sprach-Erkennung**
+- **Echtzeit-Übersetzung**
+- **Lokalisierte Antworten**
+- **Kulturspezifische Anpassungen**
+
+## 🔒 Datenschutz & Sicherheit
+
+### GDPR-Konformität
+- **Benutzer-Consent** für Datensammlung
+- **Anonymisierung** von persönlichen Daten
+- **Daten-Export** und Löschung
+- **Lokale Verarbeitung** Option
+
+### Sichere API-Key-Verwaltung
+- **VSCode SecretStorage** Integration
+- **Verschlüsselte Speicherung**
+- **Automatische Bereinigung**
+- **Audit-Logs** für Zugriffe
+
+## 🛠️ Entwicklung
+
+### Projekt-Struktur
 ```
-
-## 🔑 API-Keys
-
-### Methode 1 (Command Palette)
-1. Ctrl+Shift+P → "Model Router: Set API Key"
-2. Provider-ID (z.B. `openai`)
-3. Key eingeben
-
-### Methode 2 (Environment)
-
-```bash
-export OPENAI_API_KEY="sk-..."
-export DEEPSEEK_API_KEY="sk-..."
-```
-
-Dann: Ctrl+Shift+P → "Model Router: Import API Keys"
-
-## 🎮 Nutzung
-
-### Chat Varianten
-
-Floating Panel: Command "Model Router: Open Chat UI"
-
-Docked View: aktiv bei Setting `modelRouter.chat.showDockView`.
-
-**Funktionen:** Streaming, Modell-Override, Anhänge (Snippet + Redaction), Kosten-Footer, Tools, Plan, Voice-State.
-
-### QuickPrompt
-
-```text
-Setting "modelRouter.chat.compactMode": true
-Command "Model Router: Quick Prompt (Kompaktmodus)"
-```
-
-### Plan / Agent
-
-1. "Plan / Agent aus letztem Prompt" → nummerierter Plan (≤7)
-2. "Ausgeführten Plan starten" → sequentielle Ausführung
-3. "Plan-Ausführung abbrechen" → Abort aktueller Schritt
-
-Währenddessen:
-- Jeder Schritt eigenes Routing & Streaming
-- Kosten pro Schritt erfasst (Budget aktiv)
-- Verlaufseinträge: `[Plan Schritt X]` + Antwort
-- Statusbar: `$(sync~spin) Plan X/N`
-
-Nach Abschluss / Abbruch verschwindet der Indikator.
-
-### Anhänge Einstellungen
-
-```json
-{
-  "modelRouter.chat.attachment.maxFiles": 5,
-  "modelRouter.chat.attachment.maxSnippetBytes": 8192,
-  "modelRouter.chat.attachment.redactSecrets": true,
-  "modelRouter.chat.attachment.additionalRedactPatterns": [
-    "(?i)password\\s*[:=]\\s*['\"]?[A-Za-z0-9!@#$%^&*_-]{6,}"
-  ]
-}
-```
-
-### Persistenter Verlauf
-`modelRouter.chat.persistHistory` speichert letzte 1000 Nachrichten (abschaltbar).
-
-### Relevante Commands
-
-| Command | Zweck |
-|---------|-------|
-| Open Chat UI | Chat Panel öffnen |
-| Quick Prompt (Kompaktmodus) | Schneller Prompt ohne Panel |
-| Chat Tools | Tools-Menü |
-| Plan / Agent aus letztem Prompt | Plan generieren |
-| Ausgeführten Plan starten | Plan ausführen |
-| Plan-Ausführung abbrechen | Laufende Ausführung abbrechen |
-| Show Costs | Kostenübersicht |
-| Switch Mode | Modus wechseln |
-
-## 📊 Routing-Regeln
-
-Beispiel siehe oben (Konfiguration). Bedingungen: `anyKeyword`, `fileLangIn`, `privacyStrict`, Größenbeschränkungen etc.
-
-## 💰 Budget & Statusbar
-
-Statusbar zeigt Modus + optional Budget + Plan-Fortschritt.
-
-Settings:
-```json
-{
-  "modelRouter.showBudgetInStatusBar": true,
-  "modelRouter.budgetDisplayMode": "compact"
-}
-```
-
-Plan-Beispiel:
-```text
-$(rocket) Router: auto (2) | $0.12/2.50 | $(sync~spin) Plan 2/5
-```
-
-## 🔒 Datenschutz
-
-`privacy-strict` erzwingt lokale Modelle, blockt externe Calls, redaktiert Pfade.
-
-```yaml
-privacy:
-  redactPaths:
-    - "**/secrets/**"
-    - "**/.env*"
-  stripFileContentOverKB: 256
-  allowExternal: false
-```
-
-## 🛠 Entwicklung
-
-```bash
-npm install
-npm run watch
-# F5 Development Host
-```
-
-Struktur:
-```text
 src/
-├── extension.ts
-├── config.ts
-├── router.ts
-├── secret.ts
-├── price.ts
-├── promptClassifier.ts
-├── providers/
-└── mcp/server.ts
+├── extension.ts              # Haupt-Extension
+├── config.ts                 # Konfigurations-Management
+├── router.ts                 # Modell-Routing-Engine
+├── providers/                # AI-Provider-Implementierungen
+├── voice/                    # Sprachsteuerung
+│   ├── voiceController.ts    # Haupt-Controller
+│   ├── experimental/         # Experimentelle Features
+│   ├── webview/              # Webview-UI
+│   └── commands/             # Voice-Commands
+└── experimental-features.yaml # Experimentelle Konfiguration
 ```
 
-## 🔧 Problembehandlung
-
-**Router nicht initialisiert**: Config prüfen, API-Key setzen, Fenster reload.
-
-**Provider nicht verfügbar**: Verbindung testen, Key prüfen, Proxy/Firewall.
-
-**Kein Modell gefunden**: Routing-Regeln / Fallbacks anpassen.
-
-**Ollama**:
+### Lokale Entwicklung
 ```bash
-curl -fsSL https://ollama.ai/install.sh | sh
-ollama pull llama3.3:70b-instruct
-ollama serve
+# Dependencies installieren
+npm install
+
+# Kompilieren
+npm run compile
+
+# Extension packen
+npx @vscode/vsce package
+
+# In VSCode/Cursor installieren
+code --install-extension model-router-0.1.7.vsix
 ```
 
-## 📋 Roadmap
+## 🎯 Roadmap
 
-### v0.2.0
-- Tool-Calling
-- MCP-Vertiefung
-- Team-Konfigurationen
+### Version 0.2.0
+- [ ] **Erweiterte MCP-Integration** für Tool-Calls
+- [ ] **Multi-Modal Support** (Bild + Text)
+- [ ] **Collaborative Learning** zwischen Benutzern
+- [ ] **Advanced Analytics** Dashboard
 
-### v0.3.0
-- Anthropic Claude
-- Azure OpenAI
-- Benchmarks / A-B Tests
+### Version 0.3.0
+- [ ] **Real-time Collaboration** Features
+- [ ] **Custom Model Training** Integration
+- [ ] **Advanced Security** Features
+- [ ] **Enterprise** Features
 
-### v0.4.0
-- Workflow-Automatisierung
-- Enterprise / Telemetrie Dashboard
+## 🤝 Beitragen
+
+Wir freuen uns über Beiträge! Bitte öffnen Sie Issues oder Pull Requests für Feedback und Verbesserungen.
+
+### Experimentelle Features testen
+1. **Feature aktivieren** in `experimental-features.yaml`
+2. **Tests ausführen** mit "🧪 Experimental: Test All Features"
+3. **Feedback geben** über Issues oder Pull Requests
 
 ## 📄 Lizenz
 
-MIT – siehe [LICENSE](LICENSE).
+MIT License - siehe [LICENSE](LICENSE) für Details.
 
 ## 🙏 Danksagungen
 
-VSCode Team · OpenAI · DeepSeek · xAI · Ollama Community · MCP Contributors
+- **VSCode Team** für die großartige Extension-API
+- **Cursor Team** für die Kompatibilität
+- **OpenAI, DeepSeek, Grok, Phi** für die AI-Modelle
+- **Community** für Feedback und Beiträge
 
 ---
 
-Fragen? Issue oder Discussions öffnen.
-
-## 🖼️ Neue UI-Assets
-
-### Marketplace-Icon
-Das Marketplace-Icon ist ein 512×512 PNG und wird in der Datei `images/extension-icon-512.png` gespeichert.
-
-### Activity Bar Icons
-Die Activity Bar verwendet monochrome SVGs für Dark- und Light-Themes:
-- Light Theme: `resources/activity/light/guido_activity_light.svg`
-- Dark Theme: `resources/activity/dark/guido_activity_dark.svg`
-
-### Statusbar und Webview
-Für die Statusbar und Webview-Buttons werden PNGs in den Größen 32×32 oder 48×48 verwendet.
-
-## Version 0.1.4 - Continue.dev-inspirierte Features
-
-### 🎯 Editor Integration
-- **Kontextmenüs**: Rechtsklick auf ausgewählten Code für sofortige KI-Analyse
-  - `Explain Code`: Detaillierte Code-Erklärung
-  - `Generate Tests`: Automatische Unit-Test-Generierung  
-  - `Refactor Code`: Intelligentes Code-Refactoring
-  - `Find Bugs`: Umfassende Bug-Analyse
-  - `Add Comments`: Professionelle Code-Dokumentation
-
-### ⌨️ Tastenkombinationen
-- `Ctrl+Shift+G`: Chat UI öffnen
-- `Ctrl+Shift+V`: Sprachsteuerung starten
-- `Ctrl+Shift+E`: Code erklären (mit Auswahl)
-- `Ctrl+Shift+T`: Tests generieren (mit Auswahl)
-- `Ctrl+Shift+R`: Code refactoring (mit Auswahl)
-
-### 🎨 Verbesserte UI
-- **Moderne Markdown-Darstellung** mit Syntax-Highlighting
-- **Responsives Design** mit besserer Farbgestaltung
-- **Copy-Buttons** für alle Nachrichten
-- **Animierte Voice-States** mit Emojis
-- **Strukturierte Code-Blöcke** mit Prism.js
-- **Tabellen, Listen und Blockquotes** vollständig unterstützt
-
-### 🔧 Benutzerfreundlichkeit
-- **Ctrl+Enter** zum Senden von Nachrichten
-- **Verbesserte Token/Kosten-Anzeige** in Footer
-- **Attachment-Indikator** mit Dateizähler
-- **Hover-Effekte** und Animationen
-- **Bessere Fehlermeldungen** mit Markdown-Formatierung
-
-### Änderungen
-- Fallback-Mechanismus für Konfigurationspfad hinzugefügt
-- Verbesserte Sprachsteuerung mit Mikrofonberechtigungsprüfung
-- Moderne Webview mit Markdown-Support
-- Editor-Integration für schnelle Code-Analyse
-
-### Neue Funktionen
-- Editor-Kontextmenüs für alle Code-Operationen
-- Globale Tastenkombinationen
-- Syntax-Highlighting in Chat-Nachrichten
-- Copy-to-Clipboard für alle Antworten
+**🎤 Guido** - Ihr intelligenter AI-Assistent mit Sprachsteuerung! ✨
