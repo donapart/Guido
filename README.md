@@ -340,18 +340,46 @@ Die Activity Bar verwendet monochrome SVGs für Dark- und Light-Themes:
 ### Statusbar und Webview
 Für die Statusbar und Webview-Buttons werden PNGs in den Größen 32×32 oder 48×48 verwendet.
 
-## Version 0.1.3
+## Version 0.1.4 - Continue.dev-inspirierte Features
+
+### 🎯 Editor Integration
+- **Kontextmenüs**: Rechtsklick auf ausgewählten Code für sofortige KI-Analyse
+  - `Explain Code`: Detaillierte Code-Erklärung
+  - `Generate Tests`: Automatische Unit-Test-Generierung  
+  - `Refactor Code`: Intelligentes Code-Refactoring
+  - `Find Bugs`: Umfassende Bug-Analyse
+  - `Add Comments`: Professionelle Code-Dokumentation
+
+### ⌨️ Tastenkombinationen
+- `Ctrl+Shift+G`: Chat UI öffnen
+- `Ctrl+Shift+V`: Sprachsteuerung starten
+- `Ctrl+Shift+E`: Code erklären (mit Auswahl)
+- `Ctrl+Shift+T`: Tests generieren (mit Auswahl)
+- `Ctrl+Shift+R`: Code refactoring (mit Auswahl)
+
+### 🎨 Verbesserte UI
+- **Moderne Markdown-Darstellung** mit Syntax-Highlighting
+- **Responsives Design** mit besserer Farbgestaltung
+- **Copy-Buttons** für alle Nachrichten
+- **Animierte Voice-States** mit Emojis
+- **Strukturierte Code-Blöcke** mit Prism.js
+- **Tabellen, Listen und Blockquotes** vollständig unterstützt
+
+### 🔧 Benutzerfreundlichkeit
+- **Ctrl+Enter** zum Senden von Nachrichten
+- **Verbesserte Token/Kosten-Anzeige** in Footer
+- **Attachment-Indikator** mit Dateizähler
+- **Hover-Effekte** und Animationen
+- **Bessere Fehlermeldungen** mit Markdown-Formatierung
 
 ### Änderungen
-- Fallback-Mechanismus für Konfigurationspfad hinzugefügt.
-- Verbesserte Sprachsteuerung mit Mikrofonberechtigungsprüfung.
+- Fallback-Mechanismus für Konfigurationspfad hinzugefügt
+- Verbesserte Sprachsteuerung mit Mikrofonberechtigungsprüfung
+- Moderne Webview mit Markdown-Support
+- Editor-Integration für schnelle Code-Analyse
 
 ### Neue Funktionen
-- Unterstützung für Cursor-Modell-Router.
-
-### Installation
-1. Laden Sie die VSIX-Datei herunter.
-2. Installieren Sie die Erweiterung in VSCode über `Extensions > Install from VSIX`.
-
-### Cursor-Modell-Router
-Der Cursor-Modell-Router ermöglicht eine präzise Steuerung von Modellen basierend auf Cursor-Positionen.
+- Editor-Kontextmenüs für alle Code-Operationen
+- Globale Tastenkombinationen
+- Syntax-Highlighting in Chat-Nachrichten
+- Copy-to-Clipboard für alle Antworten

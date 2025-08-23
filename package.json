@@ -3,7 +3,7 @@
   "displayName": "Model Router (VSCode/Cursor)",
   "description": "Automatische KI-Modell-Auswahl mit Routing-Engine, Kostenmanagement und Privacy-Modi",
   "publisher": "model-router",
-  "version": "0.1.3",
+  "version": "0.1.6",
   "engines": {
     "vscode": "^1.99.0"
   },
@@ -197,9 +197,111 @@
         "command": "modelRouter.chat.cancelPlanExecution",
         "title": "Model Router: Plan-Ausführung abbrechen",
         "icon": "$(debug-stop)"
+      },
+      {
+        "command": "modelRouter.explainCode",
+        "title": "Model Router: Explain Code",
+        "icon": "$(info)"
+      },
+      {
+        "command": "modelRouter.generateTests",
+        "title": "Model Router: Generate Tests",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "modelRouter.refactorCode",
+        "title": "Model Router: Refactor Code",
+        "icon": "$(tools)"
+      },
+      {
+        "command": "modelRouter.findBugs",
+        "title": "Model Router: Find Bugs",
+        "icon": "$(bug)"
+      },
+      {
+        "command": "modelRouter.addComments",
+        "title": "Model Router: Add Comments",
+        "icon": "$(comment)"
+      },
+      {
+        "command": "modelRouter.newSession",
+        "title": "Model Router: New Chat Session",
+        "icon": "$(add)"
+      },
+      {
+        "command": "modelRouter.switchSession",
+        "title": "Model Router: Switch Session",
+        "icon": "$(arrow-swap)"
+      },
+      {
+        "command": "modelRouter.searchHistory",
+        "title": "Model Router: Search History",
+        "icon": "$(search)"
+      },
+      {
+        "command": "modelRouter.showSplitView",
+        "title": "Model Router: Show Split View",
+        "icon": "$(split-horizontal)"
+      },
+      {
+        "command": "modelRouter.multiModelChat",
+        "title": "Model Router: Multi-Model Chat",
+        "icon": "$(layers)"
+      },
+      {
+        "command": "modelRouter.createTaskPlan",
+        "title": "Model Router: Create Task Plan",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "modelRouter.executeTaskPlan",
+        "title": "Model Router: Execute Task Plan",
+        "icon": "$(run)"
+      },
+      {
+        "command": "modelRouter.optimizePrompt",
+        "title": "Model Router: Optimize Prompt",
+        "icon": "$(lightbulb)"
+      },
+      {
+        "command": "modelRouter.analyzeCode",
+        "title": "Model Router: Analyze Code",
+        "icon": "$(search-view)"
+      },
+      {
+        "command": "modelRouter.reviewPullRequest",
+        "title": "Model Router: Review Pull Request",
+        "icon": "$(git-pull-request)"
       }
     ],
     "menus": {
+      "editor/context": [
+        {
+          "command": "modelRouter.explainCode",
+          "group": "modelRouter@1",
+          "when": "editorTextFocus && editorHasSelection"
+        },
+        {
+          "command": "modelRouter.generateTests",
+          "group": "modelRouter@2",
+          "when": "editorTextFocus && editorHasSelection"
+        },
+        {
+          "command": "modelRouter.refactorCode",
+          "group": "modelRouter@3",
+          "when": "editorTextFocus && editorHasSelection"
+        },
+        {
+          "command": "modelRouter.findBugs",
+          "group": "modelRouter@4",
+          "when": "editorTextFocus && editorHasSelection"
+        },
+        {
+          "command": "modelRouter.addComments",
+          "group": "modelRouter@5",
+          "when": "editorTextFocus && editorHasSelection"
+        }
+      ],
       "commandPalette": [
         {
           "command": "modelRouter.chat",
@@ -268,9 +370,65 @@
         {
           "command": "modelRouter.chat.cancelPlanExecution",
           "icon": "$(debug-stop)"
+        },
+        {
+          "command": "modelRouter.multiModelChat",
+          "icon": "$(layers)"
+        },
+        {
+          "command": "modelRouter.createTaskPlan",
+          "icon": "$(list-tree)"
+        },
+        {
+          "command": "modelRouter.executeTaskPlan",
+          "icon": "$(run)"
+        },
+        {
+          "command": "modelRouter.optimizePrompt",
+          "icon": "$(lightbulb)"
+        },
+        {
+          "command": "modelRouter.analyzeCode",
+          "icon": "$(search-view)"
+        },
+        {
+          "command": "modelRouter.reviewPullRequest",
+          "icon": "$(git-pull-request)"
         }
       ]
     },
+    "keybindings": [
+      {
+        "command": "modelRouter.openChatUI",
+        "key": "ctrl+shift+g",
+        "mac": "cmd+shift+g",
+        "when": "!terminalFocus"
+      },
+      {
+        "command": "modelRouter.startVoiceControl",
+        "key": "ctrl+shift+v",
+        "mac": "cmd+shift+v",
+        "when": "!terminalFocus"
+      },
+      {
+        "command": "modelRouter.explainCode",
+        "key": "ctrl+shift+e",
+        "mac": "cmd+shift+e",
+        "when": "editorTextFocus && editorHasSelection"
+      },
+      {
+        "command": "modelRouter.generateTests",
+        "key": "ctrl+shift+t",
+        "mac": "cmd+shift+t",
+        "when": "editorTextFocus && editorHasSelection"
+      },
+      {
+        "command": "modelRouter.refactorCode",
+        "key": "ctrl+shift+r",
+        "mac": "cmd+shift+r",
+        "when": "editorTextFocus && editorHasSelection"
+      }
+    ],
     "views": {
       "explorer": [
         {
@@ -286,20 +444,26 @@
           "name": "💬 Model Router Chat (Dock)",
           "when": "config.modelRouter.chat.showDockView",
           "icon": "$(comment-discussion)"
+        },
+        {
+          "type": "webview",
+          "id": "modelRouterSplitView",
+          "name": "⚡ Model Router Split View",
+          "icon": "$(split-horizontal)"
         }
-      ],
-      "viewsContainers": {
-        "activitybar": [
-          {
-            "id": "guido",
-            "title": "Guido",
-            "icon": {
-              "light": "resources/activity/light/guido_activity_light.svg",
-              "dark": "resources/activity/dark/guido_activity_dark.svg"
-            }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "guido",
+          "title": "Guido",
+          "icon": {
+            "light": "resources/activity/light/guido_activity_light.svg",
+            "dark": "resources/activity/dark/guido_activity_dark.svg"
           }
-        ]
-      }
+        }
+      ]
     }
   },
   "scripts": {

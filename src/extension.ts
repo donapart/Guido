@@ -6,7 +6,15 @@ import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
 import { ChatDockViewProvider } from './webview/chatDockView';
-import { getActiveChatTargets } from './webview/chatTargets';
+import { getActiveChatTargets, ChatTarget } from './webview/chatTargets';
+import { ChatPanel } from './webview/chatPanel';
+import { SplitViewProvider } from './webview/splitViewProvider';
+
+// Phase 3: Advanced AI Capabilities
+import { MultiModelManager } from './ai/multiModelManager';
+import { AITaskPlanner } from './ai/taskPlanner';
+import { AdvancedPromptingManager } from './ai/promptingManager';
+import { ContextAwareCodeAnalyzer } from './ai/codeAnalyzer';
 
 import { ConfigError, ConfigLoader, ProfileConfig } from "./config";
 import { createModelRouterMcpServer } from "./mcp/server";
@@ -15,7 +23,7 @@ import { PromptClassifier } from "./promptClassifier";
 import { Provider } from "./providers/base";
 import { OllamaProvider } from "./providers/ollama";
 import { OpenAICompatProvider } from "./providers/openaiCompat";
-import { ModelRouter } from "./router";
+import { ModelRouter, RoutingResult } from "./router";
 import { getSecretHelper, initializeSecrets } from "./secret";
 import type { VoiceConfig } from "./voice/types";
 import { VoiceController } from "./voice/voiceController";
@@ -27,16 +35,22 @@ interface ExtensionState {
   budgetManager: BudgetManager;
   classifier?: PromptClassifier;
   voiceController?: VoiceController;
-  mcpServer?: any;
+  mcpServer?: ReturnType<typeof createModelRouterMcpServer>;
   currentMode: string;
   outputChannel: vscode.OutputChannel;
   lastBudgetSummary?: string;
+  
+  // Phase 3: Advanced AI Capabilities
+  multiModelManager?: MultiModelManager;
+  taskPlanner?: AITaskPlanner;
+  promptingManager?: AdvancedPromptingManager;
+  codeAnalyzer?: ContextAwareCodeAnalyzer;
 }
 
 let state: ExtensionState;
 let extensionContext: vscode.ExtensionContext;
 // Chat-History (mit optionaler Persistenz)
-const chatHistory: { role: 'user'|'assistant'; content: string; meta?: any }[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
+const chatHistory: { role: 'user'|'assistant'; content: string; meta?: Record<string, unknown> }[] = [];
 let chatHistoryLoaded = false;
 // Aktueller Plan (zuletzt generiert) & laufende Ausführung
 interface StoredPlan { raw: string; steps: string[]; originalUserPrompt: string; generatedAt: number; }
@@ -48,7 +62,7 @@ async function loadPersistedChatHistory() {
   try {
     const cfg = vscode.workspace.getConfiguration('modelRouter');
     if (!cfg.get<boolean>('chat.persistHistory', true)) { chatHistoryLoaded = true; return; }
-    const stored = extensionContext.globalState.get<any[]>('modelRouter.chat.history'); // eslint-disable-line @typescript-eslint/no-explicit-any
+    const stored = extensionContext.globalState.get<{ role: 'user'|'assistant'; content: string; meta?: Record<string, unknown> }[]>('modelRouter.chat.history');
     if (Array.isArray(stored)) chatHistory.push(...stored.slice(-1000));
   } catch { /* ignore */ }
   finally { chatHistoryLoaded = true; }
@@ -98,9 +112,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     await loadConfiguration();
   } catch (error) {
   vscode.window.showErrorMessage(`Fehler beim Laden der Konfiguration: ${error instanceof Error ? error.message : String(error)}`);
-  // Optional: Standard-Konfig anlegen anbieten
-  // await createDefaultConfigIfNeeded();
   }
+
+  // Initialize Phase 3 Advanced AI Capabilities
+  initializePhase3Features();
 
   // Register commands
   registerCommands(context);
@@ -111,6 +126,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     context.subscriptions.push(vscode.window.registerWebviewViewProvider(ChatDockViewProvider.viewType, dockProvider, { webviewOptions: { retainContextWhenHidden: true } }));
   } catch (e) {
     state.outputChannel.appendLine('Dock View Registrierung fehlgeschlagen: ' + (e instanceof Error ? e.message : String(e)));
+  }
+
+  // Register split view provider
+  try {
+    const splitViewProvider = new SplitViewProvider(extensionContext.extensionUri);
+    context.subscriptions.push(vscode.window.registerWebviewViewProvider(SplitViewProvider.viewType, splitViewProvider, { webviewOptions: { retainContextWhenHidden: true } }));
+  } catch (e) {
+    state.outputChannel.appendLine('Split View Registrierung fehlgeschlagen: ' + (e instanceof Error ? e.message : String(e)));
   }
 
   // Watch for configuration changes
@@ -132,6 +155,33 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   vscode.window.showInformationMessage("Model Router Extension aktiviert!");
 }
 
+/**
+ * Initialize Phase 3 Advanced AI Capabilities
+ */
+function initializePhase3Features(): void {
+  try {
+    if (state.router && state.providers.size > 0) {
+      // Initialize Multi-Model Manager
+      state.multiModelManager = new MultiModelManager(state.router, state.providers);
+      
+      // Initialize AI Task Planner
+      state.taskPlanner = new AITaskPlanner(state.router, state.providers);
+      
+      // Initialize Advanced Prompting Manager
+      state.promptingManager = new AdvancedPromptingManager(state.router, state.providers);
+      
+      // Initialize Context-Aware Code Analyzer
+      state.codeAnalyzer = new ContextAwareCodeAnalyzer(state.router, state.providers);
+      
+      state.outputChannel.appendLine('Phase 3 Advanced AI Capabilities initialized');
+    } else {
+      state.outputChannel.appendLine('Phase 3 initialization skipped - router or providers not ready');
+    }
+  } catch (error) {
+    state.outputChannel.appendLine(`Phase 3 initialization failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 export function deactivate(): void {
   if (state.mcpServer) {
     state.mcpServer.stop();
@@ -148,7 +198,6 @@ function registerCommands(context: vscode.ExtensionContext): void {
   vscode.commands.registerCommand("modelRouter.openChatUI", async () => {
       try {
         const extUri = extensionContext.extensionUri;
-        const { ChatPanel } = require('./webview/chatPanel');
         ChatPanel.createOrShow(extUri);
         // Modelle & History an Webview senden
     const targets = getActiveChatTargets();
@@ -172,12 +221,12 @@ function registerCommands(context: vscode.ExtensionContext): void {
   const targets = getActiveChatTargets();
   if (!targets.length) return; // Keine aktive Oberfläche
       try {
-        const ctx = { prompt: text, mode: state.currentMode } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+        const ctx = { prompt: text, mode: state.currentMode };
         let providerToUse: Provider | undefined;
         let modelName: string | undefined;
-        let modelPrice: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+        let modelPrice: { inputPerMTok: number; outputPerMTok: number; } | undefined;
         let providerId: string | undefined;
-        let routed: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+        let routed: RoutingResult | undefined;
         if (modelOverride) {
           const profile = state.router.getProfile();
             const provCfg = profile.providers.find(p => p.models.some(m => m.name === modelOverride));
@@ -461,6 +510,27 @@ function registerCommands(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("modelRouter.toggleVoiceControl", handleToggleVoiceControlCommand),
     vscode.commands.registerCommand("modelRouter.voiceSettings", handleVoiceSettingsCommand),
     vscode.commands.registerCommand("modelRouter.voicePermissions", handleVoicePermissionsCommand),
+
+    // Editor Integration Commands
+    vscode.commands.registerCommand("modelRouter.explainCode", handleExplainCodeCommand),
+    vscode.commands.registerCommand("modelRouter.generateTests", handleGenerateTestsCommand),
+    vscode.commands.registerCommand("modelRouter.refactorCode", handleRefactorCodeCommand),
+    vscode.commands.registerCommand("modelRouter.findBugs", handleFindBugsCommand),
+    vscode.commands.registerCommand("modelRouter.addComments", handleAddCommentsCommand),
+
+    // Phase 2: Session Management Commands
+    vscode.commands.registerCommand("modelRouter.newSession", handleNewSessionCommand),
+    vscode.commands.registerCommand("modelRouter.switchSession", handleSwitchSessionCommand),
+    vscode.commands.registerCommand("modelRouter.searchHistory", handleSearchHistoryCommand),
+    vscode.commands.registerCommand("modelRouter.showSplitView", handleShowSplitViewCommand),
+
+    // Phase 3: Advanced AI Capabilities Commands
+    vscode.commands.registerCommand("modelRouter.multiModelChat", handleMultiModelChatCommand),
+    vscode.commands.registerCommand("modelRouter.createTaskPlan", handleCreateTaskPlanCommand),
+    vscode.commands.registerCommand("modelRouter.executeTaskPlan", handleExecuteTaskPlanCommand),
+    vscode.commands.registerCommand("modelRouter.optimizePrompt", handleOptimizePromptCommand),
+    vscode.commands.registerCommand("modelRouter.analyzeCode", handleAnalyzeCodeCommand),
+    vscode.commands.registerCommand("modelRouter.reviewPullRequest", handleReviewPullRequestCommand),
   ];
 
   context.subscriptions.push(...commands);
@@ -680,30 +750,6 @@ function getConfigPath(): string {
   return configSetting;
 }
 
-/**
- * Create default configuration if needed
- */
-async function createDefaultConfigIfNeeded(): Promise<void> {
-  try {
-    const configPath = getConfigPath();
-    const loader = ConfigLoader.getInstance();
-    
-    const answer = await vscode.window.showQuickPick(
-      ["Ja, Standard-Konfiguration erstellen", "Nein, manuell konfigurieren"],
-      { placeHolder: "Soll eine Standard-Konfiguration erstellt werden?" }
-    );
-
-    if (answer?.startsWith("Ja")) {
-      loader.createDefaultConfig(configPath);
-      vscode.window.showInformationMessage(`Standard-Konfiguration erstellt: ${configPath}`);
-      
-      // Try to load the new config
-      await loadConfiguration();
-    }
-  } catch (error) {
-    state.outputChannel.appendLine(`Fehler beim Erstellen der Standard-Konfiguration: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
 
 /**
  * Start MCP server if enabled
@@ -1347,8 +1393,8 @@ async function readAttachmentSummaries(paths: string[]): Promise<AttachmentSumma
   if (redactSecrets) {
     const base = [
       /(sk|rk|pk|ak|ey|token)[-_]?[A-Za-z0-9]{12,}/gi, // generische Keys
-      /api[_-]?key\s*[:=]\s*['\"]?[A-Za-z0-9-_]{10,}['\"]?/gi,
-      /secret[_-]?key\s*[:=]\s*['\"]?[A-Za-z0-9-_]{10,}['\"]?/gi,
+      /api[_-]?key\s*[:=]\s*['"]?[A-Za-z0-9-_]{10,}['"]?/gi,
+      /secret[_-]?key\s*[:=]\s*['"]?[A-Za-z0-9-_]{10,}['"]?/gi,
       /-----BEGIN [A-Z ]+ PRIVATE KEY-----[\s\S]+?-----END [A-Z ]+ PRIVATE KEY-----/g
     ];
     secretPatterns.push(...base);
@@ -1367,7 +1413,7 @@ async function readAttachmentSummaries(paths: string[]): Promise<AttachmentSumma
       }
       const buf = fs.readFileSync(p);
       const slice = buf.slice(0, maxBytesPerFile).toString('utf8');
-      let cleaned = slice.replace(/\u0000/g, '').replace(/\s+$/,'');
+      let cleaned = slice.replace(/\0/g, '').replace(/\s+$/,'');
       if (redactSecrets && secretPatterns.length) {
         for (const rx of secretPatterns) {
           cleaned = cleaned.replace(rx, '[REDACTED]');
@@ -1379,4 +1425,583 @@ async function readAttachmentSummaries(paths: string[]): Promise<AttachmentSumma
     }
   }
   return results;
+}
+
+// ---- Editor Integration Command Handlers ----
+
+async function handleExplainCodeCommand(): Promise<void> {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) {
+    vscode.window.showWarningMessage("Kein aktiver Editor gefunden");
+    return;
+  }
+
+  const selection = editor.selection;
+  if (selection.isEmpty) {
+    vscode.window.showWarningMessage("Bitte markieren Sie Code zum Erklären");
+    return;
+  }
+
+  const selectedText = editor.document.getText(selection);
+  const language = editor.document.languageId;
+  const fileName = editor.document.fileName;
+
+  const prompt = `Erkläre folgenden ${language}-Code aus der Datei ${fileName}:
+
+\`\`\`${language}
+${selectedText}
+\`\`\`
+
+Bitte erkläre:
+1. Was macht dieser Code?
+2. Wie funktioniert er?
+3. Gibt es Besonderheiten oder potentielle Probleme?
+4. Sind Verbesserungen möglich?`;
+
+  // Öffne Chat UI und sende Prompt
+  await vscode.commands.executeCommand('modelRouter.openChatUI');
+  await vscode.commands.executeCommand('modelRouter.chat.sendFromWebview', prompt);
+}
+
+async function handleGenerateTestsCommand(): Promise<void> {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) {
+    vscode.window.showWarningMessage("Kein aktiver Editor gefunden");
+    return;
+  }
+
+  const selection = editor.selection;
+  if (selection.isEmpty) {
+    vscode.window.showWarningMessage("Bitte markieren Sie Code für Test-Generierung");
+    return;
+  }
+
+  const selectedText = editor.document.getText(selection);
+  const language = editor.document.languageId;
+  const fileName = editor.document.fileName;
+
+  const prompt = `Generiere Unit Tests für folgenden ${language}-Code aus ${fileName}:
+
+\`\`\`${language}
+${selectedText}
+\`\`\`
+
+Bitte erstelle:
+1. Umfassende Unit Tests
+2. Edge Cases und Fehlerfälle
+3. Mock-Objekte falls nötig
+4. Beschreibende Test-Namen
+5. Kommentare zur Test-Logik
+
+Verwende das passende Test-Framework für ${language}.`;
+
+  await vscode.commands.executeCommand('modelRouter.openChatUI');
+  await vscode.commands.executeCommand('modelRouter.chat.sendFromWebview', prompt);
+}
+
+async function handleRefactorCodeCommand(): Promise<void> {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) {
+    vscode.window.showWarningMessage("Kein aktiver Editor gefunden");
+    return;
+  }
+
+  const selection = editor.selection;
+  if (selection.isEmpty) {
+    vscode.window.showWarningMessage("Bitte markieren Sie Code zum Refactoring");
+    return;
+  }
+
+  const selectedText = editor.document.getText(selection);
+  const language = editor.document.languageId;
+
+  const prompt = `Refactore folgenden ${language}-Code:
+
+\`\`\`${language}
+${selectedText}
+\`\`\`
+
+Bitte verbessere:
+1. Lesbarkeit und Struktur
+2. Performance wo möglich
+3. Entferne Code-Duplikation
+4. Befolge Best Practices für ${language}
+5. Behalte die ursprüngliche Funktionalität bei
+
+Erkläre die Änderungen kurz.`;
+
+  await vscode.commands.executeCommand('modelRouter.openChatUI');
+  await vscode.commands.executeCommand('modelRouter.chat.sendFromWebview', prompt);
+}
+
+async function handleFindBugsCommand(): Promise<void> {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) {
+    vscode.window.showWarningMessage("Kein aktiver Editor gefunden");
+    return;
+  }
+
+  const selection = editor.selection;
+  if (selection.isEmpty) {
+    vscode.window.showWarningMessage("Bitte markieren Sie Code für Bug-Analyse");
+    return;
+  }
+
+  const selectedText = editor.document.getText(selection);
+  const language = editor.document.languageId;
+
+  const prompt = `Analysiere folgenden ${language}-Code auf Bugs und Probleme:
+
+\`\`\`${language}
+${selectedText}
+\`\`\`
+
+Suche nach:
+1. Potentielle Null-Pointer/Undefined-Fehler
+2. Race Conditions oder Threading-Probleme
+3. Memory Leaks
+4. Security Vulnerabilities
+5. Logic Errors
+6. Performance-Probleme
+
+Gib konkrete Lösungsvorschläge für gefundene Probleme.`;
+
+  await vscode.commands.executeCommand('modelRouter.openChatUI');
+  await vscode.commands.executeCommand('modelRouter.chat.sendFromWebview', prompt);
+}
+
+async function handleAddCommentsCommand(): Promise<void> {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) {
+    vscode.window.showWarningMessage("Kein aktiver Editor gefunden");
+    return;
+  }
+
+  const selection = editor.selection;
+  if (selection.isEmpty) {
+    vscode.window.showWarningMessage("Bitte markieren Sie Code für Kommentierung");
+    return;
+  }
+
+  const selectedText = editor.document.getText(selection);
+  const language = editor.document.languageId;
+
+  const prompt = `Füge sinnvolle Kommentare zu folgendem ${language}-Code hinzu:
+
+\`\`\`${language}
+${selectedText}
+\`\`\`
+
+Bitte füge hinzu:
+1. Funktions-/Methoden-Dokumentation
+2. Inline-Kommentare für komplexe Logik
+3. Parameter- und Rückgabe-Beschreibungen
+4. Beispiele wo sinnvoll
+5. Verwende ${language}-spezifische Doc-Kommentar-Standards
+
+Gib den vollständigen Code mit Kommentaren zurück.`;
+
+  await vscode.commands.executeCommand('modelRouter.openChatUI');
+  await vscode.commands.executeCommand('modelRouter.chat.sendFromWebview', prompt);
+}
+
+/**
+ * Phase 2: Session Management Command Handlers
+ */
+
+async function handleNewSessionCommand(): Promise<void> {
+  try {
+    const sessionName = await vscode.window.showInputBox({
+      prompt: "Name für neue Chat-Session",
+      placeHolder: "z.B. 'Frontend Refactoring' oder leer für automatischen Namen"
+    });
+
+    if (sessionName !== undefined) {
+      // Send message to active chat targets to create new session
+      const targets = getActiveChatTargets();
+      targets.forEach(target => {
+        if (target.sendMessage) {
+          target.sendMessage({
+            type: 'session:create',
+            data: { name: sessionName }
+          });
+        }
+      });
+
+      vscode.window.showInformationMessage(
+        sessionName ? `Neue Session "${sessionName}" erstellt` : "Neue Session erstellt"
+      );
+    }
+  } catch (error) {
+    vscode.window.showErrorMessage(`Fehler beim Erstellen der Session: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function handleSwitchSessionCommand(): Promise<void> {
+  try {
+    // This would typically show a quick pick with existing sessions
+    // For now, we just show the split view which includes session management
+    await handleShowSplitViewCommand();
+  } catch (error) {
+    vscode.window.showErrorMessage(`Fehler beim Wechseln der Session: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function handleSearchHistoryCommand(): Promise<void> {
+  try {
+    const searchQuery = await vscode.window.showInputBox({
+      prompt: "Durchsuche Chat-Historie",
+      placeHolder: "Suchbegriff eingeben..."
+    });
+
+    if (searchQuery) {
+      // Send search request to active chat targets
+      const targets = getActiveChatTargets();
+      targets.forEach(target => {
+        if (target.sendMessage) {
+          target.sendMessage({
+            type: 'history:search',
+            data: { query: searchQuery }
+          });
+        }
+      });
+    }
+  } catch (error) {
+    vscode.window.showErrorMessage(`Fehler bei der Suche: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function handleShowSplitViewCommand(): Promise<void> {
+  try {
+    await vscode.commands.executeCommand('workbench.view.extension.modelRouterSplitView');
+  } catch (error) {
+    vscode.window.showErrorMessage(`Fehler beim Öffnen der Split View: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/**
+ * Phase 3: Advanced AI Capabilities Command Handlers
+ */
+
+async function handleMultiModelChatCommand(): Promise<void> {
+  try {
+    if (!state.multiModelManager) {
+      vscode.window.showErrorMessage('Multi-Model Manager nicht verfügbar');
+      return;
+    }
+
+    const prompt = await vscode.window.showInputBox({
+      prompt: "Prompt für Multi-Model Vergleich",
+      placeHolder: "Geben Sie Ihren Prompt ein..."
+    });
+
+    if (!prompt) return;
+
+    const strategy = await vscode.window.showQuickPick([
+      { label: 'parallel', description: 'Alle Modelle gleichzeitig ausführen' },
+      { label: 'sequential', description: 'Modelle nacheinander mit Kontext' },
+      { label: 'consensus', description: 'Konsens aus mehreren Antworten bilden' },
+      { label: 'comparison', description: 'Vergleichende Analyse' }
+    ], {
+      placeHolder: 'Wählen Sie eine Strategie'
+    });
+
+    if (!strategy) return;
+
+    const models = ['gpt-4', 'claude-3-sonnet', 'claude-3-haiku'];
+    
+    const response = await state.multiModelManager.executeMultiModel({
+      prompt,
+      models,
+      strategy: strategy.label as any
+    });
+
+    // Display results in chat UI
+    await vscode.commands.executeCommand('modelRouter.openChatUI');
+    const targets = getActiveChatTargets();
+    
+    if (targets.length > 0) {
+      const resultMessage = `Multi-Model Ergebnis (${strategy.label}):\n\n` +
+        response.map(r => `**${r.modelId}:**\n${r.response}\n\n`).join('---\n');
+      
+      targets.forEach(target => {
+        target.addUserMessage(`Multi-Model: ${prompt}`);
+        target.streamDelta(resultMessage);
+        target.streamDone();
+      });
+    }
+
+  } catch (error) {
+    vscode.window.showErrorMessage(`Multi-Model Chat Fehler: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function handleCreateTaskPlanCommand(): Promise<void> {
+  try {
+    if (!state.taskPlanner) {
+      vscode.window.showErrorMessage('Task Planner nicht verfügbar');
+      return;
+    }
+
+    const objective = await vscode.window.showInputBox({
+      prompt: "Beschreiben Sie Ihr Ziel",
+      placeHolder: "z.B. 'Erstelle eine React-Komponente für...' oder 'Refaktoriere diese Klasse...'"
+    });
+
+    if (!objective) return;
+
+    const projectType = await vscode.window.showQuickPick([
+      'web-frontend', 'web-backend', 'mobile-app', 'desktop-app', 'library', 'other'
+    ], {
+      placeHolder: 'Projekttyp auswählen'
+    });
+
+    const qualityLevel = await vscode.window.showQuickPick([
+      { label: 'fast', description: 'Schnelle Ergebnisse' },
+      { label: 'balanced', description: 'Ausgewogene Qualität und Geschwindigkeit' },
+      { label: 'thorough', description: 'Höchste Qualität, mehr Zeit' }
+    ], {
+      placeHolder: 'Qualitätsstufe wählen'
+    });
+
+    const plan = await state.taskPlanner.createPlan({
+      objective,
+      context: {
+        projectType,
+        language: 'typescript',
+        framework: 'vscode-extension'
+      },
+      preferences: {
+        qualityLevel: qualityLevel?.label as any
+      }
+    });
+
+    // Show plan in a new document
+    const doc = await vscode.workspace.openTextDocument({
+      content: `# Task Plan: ${plan.title}\n\n${plan.description}\n\n## Tasks:\n\n` +
+        plan.tasks.map((task, i) => 
+          `${i + 1}. **${task.title}** (${task.estimatedTime}min)\n   ${task.description}`
+        ).join('\n\n'),
+      language: 'markdown'
+    });
+
+    await vscode.window.showTextDocument(doc);
+
+    // Ask if user wants to execute
+    const execute = await vscode.window.showQuickPick(['Ja', 'Nein'], {
+      placeHolder: 'Plan ausführen?'
+    });
+
+    if (execute === 'Ja') {
+      await vscode.commands.executeCommand('modelRouter.executeTaskPlan', plan.id);
+    }
+
+  } catch (error) {
+    vscode.window.showErrorMessage(`Task Plan Fehler: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function handleExecuteTaskPlanCommand(planId?: string): Promise<void> {
+  try {
+    if (!state.taskPlanner) {
+      vscode.window.showErrorMessage('Task Planner nicht verfügbar');
+      return;
+    }
+
+    let targetPlanId = planId;
+    if (!targetPlanId) {
+      const plans = state.taskPlanner.getActivePlans();
+      if (plans.length === 0) {
+        vscode.window.showErrorMessage('Keine aktiven Pläne verfügbar');
+        return;
+      }
+
+      const selectedPlan = await vscode.window.showQuickPick(
+        plans.map(p => ({ label: p.title, description: p.description, planId: p.id })),
+        { placeHolder: 'Plan zum Ausführen wählen' }
+      );
+
+      if (!selectedPlan) return;
+      targetPlanId = selectedPlan.planId;
+    }
+
+    await vscode.window.withProgress({
+      location: vscode.ProgressLocation.Notification,
+      title: "Task Plan wird ausgeführt...",
+      cancellable: true
+    }, async (progress, token) => {
+      const result = await state.taskPlanner!.executePlan(targetPlanId!, (task, progressValue) => {
+        progress.report({ 
+          increment: progressValue, 
+          message: `Ausführung: ${task.title}` 
+        });
+      });
+
+      // Show results
+      const resultContent = `# Task Plan Ergebnis\n\n` +
+        `Status: ${result.status}\n\n` +
+        `## Ergebnisse:\n\n` +
+        result.tasks.map(task => 
+          `### ${task.title} (${task.status})\n` +
+          (task.result?.output || 'Kein Ergebnis')
+        ).join('\n\n');
+
+      const doc = await vscode.workspace.openTextDocument({
+        content: resultContent,
+        language: 'markdown'
+      });
+
+      await vscode.window.showTextDocument(doc);
+    });
+
+  } catch (error) {
+    vscode.window.showErrorMessage(`Task Plan Ausführung Fehler: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function handleOptimizePromptCommand(): Promise<void> {
+  try {
+    if (!state.promptingManager) {
+      vscode.window.showErrorMessage('Prompting Manager nicht verfügbar');
+      return;
+    }
+
+    const originalPrompt = await vscode.window.showInputBox({
+      prompt: "Prompt zum Optimieren",
+      placeHolder: "Geben Sie Ihren ursprünglichen Prompt ein..."
+    });
+
+    if (!originalPrompt) return;
+
+    const objective = await vscode.window.showInputBox({
+      prompt: "Was möchten Sie mit diesem Prompt erreichen?",
+      placeHolder: "Beschreiben Sie das gewünschte Ergebnis..."
+    });
+
+    if (!objective) return;
+
+    const optimized = await state.promptingManager.optimizePrompt({
+      original_prompt: originalPrompt,
+      objective
+    });
+
+    // Show optimization results
+    const resultContent = `# Prompt Optimierung\n\n` +
+      `## Original:\n${originalPrompt}\n\n` +
+      `## Optimiert:\n${optimized.optimized_prompt}\n\n` +
+      `## Verbesserungen:\n${optimized.improvements.map(i => `- ${i}`).join('\n')}\n\n` +
+      `## Strategie: ${optimized.strategy_used}\n` +
+      `## Konfidenz: ${(optimized.confidence * 100).toFixed(1)}%\n` +
+      `## Erwartete Qualitätssteigerung: ${(optimized.expected_quality_gain * 100).toFixed(1)}%\n\n` +
+      `## Begründung:\n${optimized.reasoning}`;
+
+    const doc = await vscode.workspace.openTextDocument({
+      content: resultContent,
+      language: 'markdown'
+    });
+
+    await vscode.window.showTextDocument(doc);
+
+  } catch (error) {
+    vscode.window.showErrorMessage(`Prompt Optimierung Fehler: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function handleAnalyzeCodeCommand(): Promise<void> {
+  try {
+    if (!state.codeAnalyzer) {
+      vscode.window.showErrorMessage('Code Analyzer nicht verfügbar');
+      return;
+    }
+
+    const activeEditor = vscode.window.activeTextEditor;
+    if (!activeEditor) {
+      vscode.window.showErrorMessage('Keine aktive Datei geöffnet');
+      return;
+    }
+
+    const focus = await vscode.window.showQuickPick([
+      { label: 'quality', description: 'Code-Qualität und Wartbarkeit' },
+      { label: 'security', description: 'Sicherheitslücken und Vulnerabilities' },
+      { label: 'performance', description: 'Performance-Optimierungen' },
+      { label: 'architecture', description: 'Architektur und Design-Patterns' },
+      { label: 'documentation', description: 'Dokumentation und Kommentare' },
+      { label: 'testing', description: 'Test-Abdeckung und Qualität' }
+    ], {
+      placeHolder: 'Analysefokus wählen'
+    });
+
+    if (!focus) return;
+
+    const depth = await vscode.window.showQuickPick([
+      { label: 'shallow', description: 'Oberflächliche Analyse' },
+      { label: 'medium', description: 'Mittlere Tiefe' },
+      { label: 'deep', description: 'Tiefgehende Analyse' }
+    ], {
+      placeHolder: 'Analysetiefe wählen'
+    });
+
+    if (!depth) return;
+
+    await vscode.window.withProgress({
+      location: vscode.ProgressLocation.Notification,
+      title: "Code wird analysiert...",
+      cancellable: false
+    }, async () => {
+      const result = await state.codeAnalyzer!.analyzeCode({
+        type: 'single_file',
+        target: activeEditor.document.fileName,
+        focus: focus.label as any,
+        depth: depth.label as any,
+        includeContext: true
+      });
+
+      // Show analysis results
+      const resultContent = `# Code-Analyse Ergebnis\n\n` +
+        `Datei: ${activeEditor.document.fileName}\n` +
+        `Fokus: ${focus.description}\n` +
+        `Tiefe: ${depth.description}\n` +
+        `Konfidenz: ${(result.confidence * 100).toFixed(1)}%\n\n` +
+        `## Zusammenfassung\n${result.summary}\n\n` +
+        `## Befunde (${result.findings.length})\n\n` +
+        result.findings.map(f => 
+          `### ${f.message} (${f.severity})\n` +
+          `**Kategorie:** ${f.category}\n` +
+          `**Zeile:** ${f.location.line}\n` +
+          `**Beschreibung:** ${f.description}\n`
+        ).join('\n') +
+        `\n## Empfehlungen (${result.recommendations.length})\n\n` +
+        result.recommendations.map(r =>
+          `### ${r.title} (${r.priority})\n` +
+          `**Typ:** ${r.type}\n` +
+          `**Aufwand:** ${r.estimated_effort}\n` +
+          `**Beschreibung:** ${r.description}\n` +
+          `**Implementierung:** ${r.implementation}\n` +
+          `**Vorteile:** ${r.benefits.join(', ')}\n`
+        ).join('\n') +
+        `\n## Metriken\n` +
+        `- Zeilen: ${result.metrics.lines_of_code}\n` +
+        `- Zyklomatische Komplexität: ${result.metrics.cyclomatic_complexity}\n` +
+        `- Wartbarkeitsindex: ${result.metrics.maintainability_index.toFixed(1)}\n` +
+        `- Technische Schuld: ${result.metrics.technical_debt.toFixed(1)}\n`;
+
+      const doc = await vscode.workspace.openTextDocument({
+        content: resultContent,
+        language: 'markdown'
+      });
+
+      await vscode.window.showTextDocument(doc);
+    });
+
+  } catch (error) {
+    vscode.window.showErrorMessage(`Code-Analyse Fehler: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function handleReviewPullRequestCommand(): Promise<void> {
+  try {
+    vscode.window.showInformationMessage('Pull Request Review Feature wird in einer zukünftigen Version implementiert');
+  } catch (error) {
+    vscode.window.showErrorMessage(`PR Review Fehler: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }

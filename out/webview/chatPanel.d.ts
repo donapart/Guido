@@ -3,6 +3,9 @@ export declare class ChatPanel {
     static current: ChatPanel | undefined;
     private readonly panel;
     private disposables;
+    private sessionManager;
+    private historyNavigator;
+    private currentSessionId;
     static readonly viewType = "modelRouter.chatPanel";
     static createOrShow(extensionUri: vscode.Uri): void;
     private constructor();
@@ -21,6 +24,14 @@ export declare class ChatPanel {
     sendModels(models: string[]): void;
     sendVoiceState(state: string): void;
     private handleMessage;
+    private addMessageToSession;
+    private loadSessionHistory;
+    private createNewSession;
+    private switchSession;
+    private deleteSession;
+    private renameSession;
+    private searchHistory;
+    private sendSessionsList;
     dispose(): void;
     private renderHtml;
 }

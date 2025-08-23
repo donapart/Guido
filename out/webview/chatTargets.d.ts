@@ -11,6 +11,10 @@ export interface ChatTarget {
     addUserMessage(t: string): void;
     sendModels(models: string[]): void;
     sendVoiceState(state: string): void;
+    sendMessage?(message: {
+        type: string;
+        data?: any;
+    }): void;
 }
 export declare function getActiveChatTargets(): ChatTarget[];
 //# sourceMappingURL=chatTargets.d.ts.map

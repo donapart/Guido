@@ -10,6 +10,7 @@ export interface ChatTarget {
   addUserMessage(t: string): void;
   sendModels(models: string[]): void;
   sendVoiceState(state: string): void;
+  sendMessage?(message: { type: string; data?: any }): void; // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
 export function getActiveChatTargets(): ChatTarget[] {
