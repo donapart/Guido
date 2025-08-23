@@ -1,0 +1,334 @@
+# Experimentelle Features Konfiguration für Guido
+# Diese Datei enthält alle experimentellen Features und deren Einstellungen
+
+experimental:
+  # Voice-Enhancements
+  voice_enhancements:
+    emotion_detection:
+      enabled: true
+      models: ["emotion-analyzer-v1", "sentiment-detector"]
+      confidence_threshold: 0.7
+      real_time_analysis: true
+      emotion_mapping:
+        happy: ["gut", "toll", "super", "fantastisch", "ausgezeichnet"]
+        sad: ["schlecht", "traurig", "frustriert", "enttäuscht", "nicht gut"]
+        angry: ["wütend", "ärgerlich", "verärgert", "genervt", "frustriert"]
+        excited: ["aufgeregt", "begeistert", "spannend", "interessant"]
+        confused: ["verwirrt", "verstehe nicht", "unklar", "kompliziert"]
+        neutral: ["okay", "normal", "standard", "gewöhnlich"]
+    
+    context_awareness:
+      enabled: true
+      features:
+        - "project_context"
+        - "user_expertise"
+        - "conversation_history"
+        - "file_context"
+        - "recent_commands"
+        - "workspace_analysis"
+      context_weighting:
+        project_context: 0.3
+        user_expertise: 0.25
+        conversation_history: 0.2
+        file_context: 0.15
+        recent_commands: 0.1
+    
+    multilingual:
+      enabled: true
+      auto_detect: true
+      supported_languages: ["de", "en", "fr", "es", "it", "pt", "nl", "pl", "ru"]
+      translation_backend: "experimental_translator"
+      fallback_language: "de"
+      confidence_threshold: 0.6
+      language_patterns:
+        de: ["der", "die", "das", "und", "oder", "nicht", "gut", "schlecht"]
+        en: ["the", "and", "or", "not", "good", "bad", "help", "please"]
+        fr: ["le", "la", "et", "ou", "non", "bon", "mauvais", "aide"]
+        es: ["el", "la", "y", "o", "no", "bueno", "malo", "ayuda"]
+        it: ["il", "la", "e", "o", "non", "buono", "cattivo", "aiuto"]
+        pt: ["o", "a", "e", "ou", "não", "bom", "ruim", "ajuda"]
+        nl: ["de", "het", "en", "of", "niet", "goed", "slecht", "hulp"]
+        pl: ["ten", "ta", "i", "lub", "nie", "dobry", "zły", "pomoc"]
+        ru: ["тот", "та", "и", "или", "не", "хороший", "плохой", "помощь"]
+
+  # Routing-Enhancements
+  routing_enhancements:
+    dynamic_selection:
+      enabled: true
+      performance_tracking: true
+      adaptive_threshold: 0.8
+      learning_rate: 0.1
+      performance_metrics:
+        - "response_time"
+        - "accuracy"
+        - "user_satisfaction"
+        - "cost_efficiency"
+        - "reliability"
+    
+    context_routing:
+      enabled: true
+      context_factors:
+        - "project_type"
+        - "user_expertise"
+        - "task_complexity"
+        - "time_constraints"
+        - "budget_constraints"
+        - "privacy_requirements"
+      routing_rules:
+        expert_complex:
+          condition: "user_expertise == 'expert' AND task_complexity == 'complex'"
+          action: "select_model('gpt-4o')"
+          priority: 1
+        beginner_simple:
+          condition: "user_expertise == 'beginner' AND task_complexity == 'simple'"
+          action: "select_model('gpt-4o-mini')"
+          priority: 2
+        cost_optimized:
+          condition: "budget_constraints == 'strict'"
+          action: "select_model('phi-3.5')"
+          priority: 3
+        privacy_focused:
+          condition: "privacy_requirements == 'high'"
+          action: "select_model('local-ollama')"
+          priority: 4
+
+  # UI-Enhancements
+  ui_enhancements:
+    adaptive_interface:
+      enabled: true
+      learning_rate: 0.1
+      adaptation_threshold: 5
+      interface_modes:
+        beginner:
+          verbosity: "high"
+          technical_level: "low"
+          guidance: "extensive"
+          visual_cues: "many"
+          help_text: "always"
+          confirmation_required: true
+        expert:
+          verbosity: "low"
+          technical_level: "high"
+          guidance: "minimal"
+          visual_cues: "few"
+          help_text: "on_demand"
+          confirmation_required: false
+        casual:
+          verbosity: "medium"
+          technical_level: "medium"
+          guidance: "moderate"
+          visual_cues: "moderate"
+          help_text: "contextual"
+          confirmation_required: false
+    
+    visualization:
+      enabled: true
+      features:
+        - "emotion_indicator"
+        - "context_display"
+        - "performance_metrics"
+        - "confidence_visualization"
+        - "intent_display"
+        - "multilingual_info"
+        - "adaptive_response_preview"
+      real_time_updates: true
+      animation_duration: 300
+      color_schemes:
+        emotion:
+          happy: "#4CAF50"
+          sad: "#2196F3"
+          angry: "#F44336"
+          excited: "#FF9800"
+          confused: "#9C27B0"
+          neutral: "#9E9E9E"
+        status:
+          success: "#4CAF50"
+          warning: "#FF9800"
+          error: "#F44336"
+          info: "#2196F3"
+
+  # NLP-Enhancements
+  nlp_enhancements:
+    intent_recognition:
+      enabled: true
+      patterns:
+        code_generation:
+          - "(?:schreibe|erstelle|generiere|mache)\\s+(?:code|programm|funktion|klasse)"
+          - "(?:implementiere|entwickle)\\s+(?:eine|ein)\\s+(?:funktion|klasse|programm)"
+        code_review:
+          - "(?:prüfe|bewerte|analysiere|review)\\s+(?:den|die|das)\\s+(?:code|programm)"
+          - "(?:code|programm)\\s+(?:review|prüfung|analyse)"
+        code_optimization:
+          - "(?:optimiere|verbessere|beschleunige)\\s+(?:den|die|das)\\s+(?:code|programm)"
+          - "(?:performance|geschwindigkeit)\\s+(?:verbessern|optimieren)"
+        debugging:
+          - "(?:debug|fehler|problem|bug)\\s+(?:finden|beheben|lösen)"
+          - "(?:warum|weshalb)\\s+(?:funktioniert|geht)\\s+(?:nicht)"
+        explanation:
+          - "(?:erkläre|was|wie|warum)\\s+(?:ist|funktioniert|bedeutet)"
+          - "(?:verstehe|verstehen)\\s+(?:nicht|nicht ganz)"
+        system_help:
+          - "(?:hilfe|help|unterstützung|support)"
+          - "(?:was|wie)\\s+(?:kann|funktioniert)"
+        settings:
+          - "(?:einstellungen|settings|konfiguration|config)"
+          - "(?:ändern|anpassen|setzen)\\s+(?:einstellung)"
+        voice_control:
+          - "(?:stimme|voice|sprechen|sprach)"
+          - "(?:mikrofon|aufnahme|recording)"
+    
+    entity_extraction:
+      enabled: true
+      entities:
+        programming_language:
+          - "(?:javascript|js|typescript|ts|python|py|java|c\\+\\+|c#|php|ruby|go|rust|swift|kotlin)"
+        file_type:
+          - "\\.(?:js|ts|py|java|cpp|cs|php|rb|go|rs|swift|kt|html|css|json|xml|yaml|md)"
+        vscode_feature:
+          - "(?:terminal|debugger|git|extensions|explorer|search|replace|snippets)"
+        emotion:
+          - "(?:frustriert|wütend|verwirrt|glücklich|zufrieden|enttäuscht|begeistert)"
+    
+    conversation_memory:
+      enabled: true
+      max_interactions: 50
+      max_context_entries: 100
+      max_age_hours: 24
+      memory_cleanup_interval: 3600
+      context_relevance_threshold: 0.5
+
+  # Personality-Adaptation
+  personality_adaptation:
+    enabled: true
+    personality_profiles:
+      beginner:
+        style: "helpful"
+        formality: 0.3
+        verbosity: 0.8
+        technical_level: 0.2
+        humor: 0.4
+        patience: 0.9
+        guidance_level: "extensive"
+      expert:
+        style: "efficient"
+        formality: 0.7
+        verbosity: 0.4
+        technical_level: 0.9
+        humor: 0.2
+        patience: 0.6
+        guidance_level: "minimal"
+      casual:
+        style: "friendly"
+        formality: 0.2
+        verbosity: 0.6
+        technical_level: 0.5
+        humor: 0.8
+        patience: 0.7
+        guidance_level: "moderate"
+    
+    adaptation_factors:
+      user_expertise: 0.4
+      communication_style: 0.3
+      task_complexity: 0.2
+      time_pressure: 0.1
+
+  # Performance-Tracking
+  performance_tracking:
+    enabled: true
+    metrics:
+      - "response_time"
+      - "accuracy"
+      - "user_satisfaction"
+      - "cost_efficiency"
+      - "reliability"
+      - "context_relevance"
+      - "intent_accuracy"
+      - "emotion_detection_accuracy"
+    
+    tracking_interval: 60
+    data_retention_days: 30
+    anonymization: true
+    export_format: "json"
+
+  # Experimental-Commands
+  experimental_commands:
+    enabled: true
+    commands:
+      - "experimental emotion test"
+      - "experimental context analysis"
+      - "experimental intent recognition"
+      - "experimental adaptive response"
+      - "experimental performance metrics"
+      - "experimental personality test"
+      - "experimental multilingual test"
+      - "experimental routing test"
+    
+    voice_triggers:
+      - "teste emotion"
+      - "analysiere kontext"
+      - "erkenne intent"
+      - "adaptive antwort"
+      - "zeige metriken"
+      - "teste persönlichkeit"
+      - "teste mehrsprachigkeit"
+      - "teste routing"
+
+  # Safety-and-Fallbacks
+  safety_and_fallbacks:
+    experimental_mode_warning: true
+    fallback_to_standard: true
+    error_recovery: true
+    graceful_degradation: true
+    performance_monitoring: true
+    
+    fallback_chain:
+      - "experimental_feature"
+      - "standard_feature"
+      - "basic_feature"
+      - "error_message"
+    
+    error_thresholds:
+      max_response_time: 10000
+      max_error_rate: 0.1
+      max_fallback_rate: 0.3
+
+  # Development-and-Debugging
+  development_and_debugging:
+    debug_mode: false
+    verbose_logging: false
+    performance_profiling: false
+    experimental_metrics: true
+    
+    debug_features:
+      - "intent_debug"
+      - "emotion_debug"
+      - "context_debug"
+      - "routing_debug"
+      - "personality_debug"
+    
+    log_levels:
+      experimental: "info"
+      performance: "warn"
+      errors: "error"
+      debug: "debug"
+
+# Experimentelle Feature-Flags
+feature_flags:
+  emotion_detection_v2: false
+  advanced_context_analysis: false
+  multi_modal_intent: false
+  predictive_routing: false
+  adaptive_learning: false
+  real_time_optimization: false
+  cross_session_memory: false
+  collaborative_learning: false
+
+# Experimentelle Konfiguration für Tests
+test_configuration:
+  mock_emotions: true
+  mock_context: true
+  mock_intents: true
+  mock_personality: true
+  test_mode: false
+  performance_testing: false
+  stress_testing: false

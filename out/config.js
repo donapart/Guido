@@ -40,8 +40,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ConfigLoader = exports.ConfigError = void 0;
+exports.loadConfiguration = loadConfiguration;
 const fs = __importStar(require("node:fs"));
 const path = __importStar(require("node:path"));
+const vscode = __importStar(require("vscode"));
 const yaml_1 = __importDefault(require("yaml"));
 class ConfigError extends Error {
     path;
@@ -148,7 +150,15 @@ class ConfigLoader {
         if (!profile || typeof profile !== "object") {
             throw new ConfigError(`${prefix} must be an object`);
         }
-        const validModes = ["auto", "speed", "quality", "cheap", "local-only", "offline", "privacy-strict"];
+        const validModes = [
+            "auto",
+            "speed",
+            "quality",
+            "cheap",
+            "local-only",
+            "offline",
+            "privacy-strict",
+        ];
         if (!profile.mode || !validModes.includes(profile.mode)) {
             throw new ConfigError(`${prefix} mode must be one of: ${validModes.join(", ")}`);
         }
@@ -166,7 +176,8 @@ class ConfigLoader {
         if (!Array.isArray(profile.routing.rules)) {
             throw new ConfigError(`${prefix} routing rules must be an array`);
         }
-        if (!profile.routing.default || !Array.isArray(profile.routing.default.prefer)) {
+        if (!profile.routing.default ||
+            !Array.isArray(profile.routing.default.prefer)) {
             throw new ConfigError(`${prefix} routing must have default.prefer array`);
         }
         // Validate routing rules
@@ -203,7 +214,8 @@ class ConfigLoader {
         if (!model.name || typeof model.name !== "string") {
             throw new ConfigError(`${prefix} must have a non-empty name`);
         }
-        if (model.context !== undefined && (typeof model.context !== "number" || model.context <= 0)) {
+        if (model.context !== undefined &&
+            (typeof model.context !== "number" || model.context <= 0)) {
             throw new ConfigError(`${prefix} context must be a positive number`);
         }
         if (model.caps !== undefined && !Array.isArray(model.caps)) {
@@ -224,7 +236,8 @@ class ConfigLoader {
             throw new ConfigError(`${prefix} outputPerMTok must be a non-negative number`);
         }
         if (price.cachedInputPerMTok !== undefined &&
-            (typeof price.cachedInputPerMTok !== "number" || price.cachedInputPerMTok < 0)) {
+            (typeof price.cachedInputPerMTok !== "number" ||
+                price.cachedInputPerMTok < 0)) {
             throw new ConfigError(`${prefix} cachedInputPerMTok must be a non-negative number`);
         }
     }
@@ -284,7 +297,7 @@ class ConfigLoader {
                                     caps: ["cheap", "tools", "json"],
                                     price: {
                                         inputPerMTok: 0.15,
-                                        outputPerMTok: 0.60,
+                                        outputPerMTok: 0.6,
                                         cachedInputPerMTok: 0.08,
                                     },
                                 },
@@ -327,4 +340,28 @@ class ConfigLoader {
     }
 }
 exports.ConfigLoader = ConfigLoader;
+/**
+ * Load configuration from the default location
+ */
+async function loadConfiguration() {
+    const configLoader = ConfigLoader.getInstance();
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!workspaceRoot) {
+        throw new ConfigError("No workspace folder found");
+    }
+    const configPath = path.join(workspaceRoot, "router.config.yaml");
+    try {
+        const config = configLoader.loadConfig(configPath);
+        return config.profiles[config.activeProfile];
+    }
+    catch (error) {
+        if (error instanceof ConfigError && error.message.includes("not found")) {
+            // Create default config if it doesn't exist
+            configLoader.createDefaultConfig(configPath);
+            const config = configLoader.loadConfig(configPath);
+            return config.profiles[config.activeProfile];
+        }
+        throw error;
+    }
+}
 //# sourceMappingURL=config.js.map

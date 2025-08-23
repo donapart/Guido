@@ -1,455 +1,126 @@
 {
   "name": "model-router",
-  "displayName": "Model Router (VSCode/Cursor)",
-  "description": "Automatische KI-Modell-Auswahl mit Routing-Engine, Kostenmanagement und Privacy-Modi",
+  "displayName": "Guido Model Router",
+  "description": "Intelligenter AI Model Router mit Sprachsteuerung und experimentellen Features",
+  "version": "0.1.7",
   "publisher": "model-router",
-  "version": "0.1.6",
   "engines": {
     "vscode": "^1.99.0"
   },
   "categories": [
     "Other",
-    "Machine Learning"
+    "Machine Learning",
+    "Voice Control"
   ],
   "keywords": [
     "ai",
-    "llm",
     "model",
     "router",
-    "openai",
-    "ollama",
-    "cost-aware"
-  ],
-  "activationEvents": [
-    "onStartupFinished"
+    "voice",
+    "control",
+    "experimental",
+    "guido"
   ],
   "main": "./out/extension.js",
-  "icon": "images/extension-icon-512.png",
+  "activationEvents": [
+    "onCommand:modelRouter.chat",
+    "onCommand:modelRouter.startVoiceControl",
+    "onCommand:modelRouter.experimental.showUI"
+  ],
   "contributes": {
-    "configuration": {
-      "title": "Model Router",
-      "properties": {
-        "modelRouter.configPath": {
-          "type": "string",
-          "default": "${workspaceFolder}/router.config.yaml",
-          "description": "Pfad zur Router-Konfiguration (YAML)."
-        },
-        "modelRouter.mode": {
-          "type": "string",
-          "enum": [
-            "auto",
-            "speed",
-            "quality",
-            "cheap",
-            "local-only",
-            "offline",
-            "privacy-strict"
-          ],
-          "default": "auto",
-          "description": "Aktiver Routing-Modus"
-        },
-        "modelRouter.enablePromptClassifier": {
-          "type": "boolean",
-          "default": false,
-          "description": "Erweiterte Prompt-Klassifikation aktivieren"
-        },
-        "modelRouter.showBudgetInStatusBar": {
-          "type": "boolean",
-          "default": true,
-          "description": "Budgetverbrauch in der Statusleiste anzeigen"
-        },
-        "modelRouter.budgetDisplayMode": {
-          "type": "string",
-          "enum": [
-            "compact",
-            "detailed"
-          ],
-          "default": "compact",
-          "description": "Anzeigeformat für Budget (compact: Tagesbudget, detailed: Tag & Monat)"
-        },
-        "modelRouter.chat.compactMode": {
-          "type": "boolean",
-          "default": false,
-          "description": "Kompaktmodus: kein Panel automatisch, Quick Prompt Command verwenden"
-        },
-        "modelRouter.chat.persistHistory": {
-          "type": "boolean",
-          "default": true,
-          "description": "Chatverlauf (letzte 1000 Nachrichten) zwischen Sessions speichern"
-        },
-        "modelRouter.chat.showDockView": {
-          "type": "boolean",
-          "default": true,
-          "description": "Andockbare Chat-Ansicht (Explorer) anzeigen"
-        },
-        "modelRouter.chat.attachment.maxFiles": {
-          "type": "number",
-          "default": 5,
-          "description": "Maximale Anzahl Anhänge, die zusammengefasst werden"
-        },
-        "modelRouter.chat.attachment.maxSnippetBytes": {
-          "type": "number",
-          "default": 8192,
-          "description": "Maximale Anzahl Bytes pro Anhang für Vorschau/Snippet"
-        },
-        "modelRouter.chat.attachment.redactSecrets": {
-          "type": "boolean",
-          "default": true,
-          "description": "Geheime Tokens/API-Keys in Anhängen automatisch schwärzen"
-        },
-        "modelRouter.chat.attachment.additionalRedactPatterns": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "default": [],
-          "description": "Zusätzliche Regex-Pattern für Geheimnis-Redaktion"
-        }
-      }
-    },
     "commands": [
       {
         "command": "modelRouter.chat",
         "title": "Model Router: Chat",
-        "icon": "$(comment-discussion)"
-      },
-      {
-        "command": "modelRouter.openChatUI",
-        "title": "Model Router: Open Chat UI",
-        "icon": "$(terminal)"
-      },
-      {
-        "command": "modelRouter.routeOnce",
-        "title": "Model Router: Route Prompt Once",
-        "icon": "$(search)"
-      },
-      {
-        "command": "modelRouter.setApiKey",
-        "title": "Model Router: Set API Key (Provider)",
-        "icon": "$(key)"
-      },
-      {
-        "command": "modelRouter.switchMode",
-        "title": "Model Router: Switch Mode",
-        "icon": "$(settings-gear)"
+        "category": "Model Router"
       },
       {
         "command": "modelRouter.openConfig",
         "title": "Model Router: Open Config",
-        "icon": "$(edit)"
+        "category": "Model Router"
       },
       {
-        "command": "modelRouter.showCosts",
-        "title": "Model Router: Show Costs",
-        "icon": "$(graph)"
-      },
-      {
-        "command": "modelRouter.testConnection",
-        "title": "Model Router: Test Provider Connection",
-        "icon": "$(plug)"
+        "command": "modelRouter.estimateCost",
+        "title": "Model Router: Estimate Cost",
+        "category": "Model Router"
       },
       {
         "command": "modelRouter.startVoiceControl",
         "title": "Model Router: Start Voice Control (Guido)",
-        "icon": "$(mic)"
+        "category": "Model Router"
       },
       {
         "command": "modelRouter.stopVoiceControl",
         "title": "Model Router: Stop Voice Control",
-        "icon": "$(mic-off)"
+        "category": "Model Router"
       },
       {
         "command": "modelRouter.toggleVoiceControl",
         "title": "Model Router: Toggle Voice Control",
-        "icon": "$(mic-filled)"
+        "category": "Model Router"
       },
       {
         "command": "modelRouter.voiceSettings",
         "title": "Model Router: Voice Settings",
-        "icon": "$(settings-gear)"
+        "category": "Model Router"
       },
       {
         "command": "modelRouter.voicePermissions",
-        "title": "Model Router: Voice Permissions & Privacy",
-        "icon": "$(shield)"
+        "title": "Model Router: Voice Permissions",
+        "category": "Model Router"
       },
       {
-        "command": "modelRouter.chat.quickPrompt",
-        "title": "Model Router: Quick Prompt (Kompaktmodus)",
-        "icon": "$(comment)"
+        "command": "modelRouter.experimental.emotionAnalysis",
+        "title": "🧪 Experimental: Emotion Analysis",
+        "category": "Model Router Experimental"
       },
       {
-        "command": "modelRouter.chat.tools",
-        "title": "Model Router: Chat Tools",
-        "icon": "$(tools)"
+        "command": "modelRouter.experimental.contextEnhancement",
+        "title": "🧪 Experimental: Context Enhancement",
+        "category": "Model Router Experimental"
       },
       {
-        "command": "modelRouter.chat.planCurrent",
-        "title": "Model Router: Plan / Agent aus letztem Prompt",
-        "icon": "$(rocket)"
+        "command": "modelRouter.experimental.adaptiveRouting",
+        "title": "🧪 Experimental: Adaptive Routing",
+        "category": "Model Router Experimental"
       },
       {
-        "command": "modelRouter.chat.executePlan",
-        "title": "Model Router: Ausgeführten Plan starten",
-        "icon": "$(run-all)"
+        "command": "modelRouter.experimental.intentRecognition",
+        "title": "🧪 Experimental: Intent Recognition",
+        "category": "Model Router Experimental"
       },
       {
-        "command": "modelRouter.chat.cancelPlanExecution",
-        "title": "Model Router: Plan-Ausführung abbrechen",
-        "icon": "$(debug-stop)"
+        "command": "modelRouter.experimental.personalityAdaptation",
+        "title": "🧪 Experimental: Personality Adaptation",
+        "category": "Model Router Experimental"
       },
       {
-        "command": "modelRouter.explainCode",
-        "title": "Model Router: Explain Code",
-        "icon": "$(info)"
+        "command": "modelRouter.experimental.multilingualProcessing",
+        "title": "🧪 Experimental: Multilingual Processing",
+        "category": "Model Router Experimental"
       },
       {
-        "command": "modelRouter.generateTests",
-        "title": "Model Router: Generate Tests",
-        "icon": "$(beaker)"
+        "command": "modelRouter.experimental.performanceMetrics",
+        "title": "🧪 Experimental: Performance Metrics",
+        "category": "Model Router Experimental"
       },
       {
-        "command": "modelRouter.refactorCode",
-        "title": "Model Router: Refactor Code",
-        "icon": "$(tools)"
+        "command": "modelRouter.experimental.showUI",
+        "title": "🧪 Experimental: Show UI",
+        "category": "Model Router Experimental"
       },
       {
-        "command": "modelRouter.findBugs",
-        "title": "Model Router: Find Bugs",
-        "icon": "$(bug)"
-      },
-      {
-        "command": "modelRouter.addComments",
-        "title": "Model Router: Add Comments",
-        "icon": "$(comment)"
-      },
-      {
-        "command": "modelRouter.newSession",
-        "title": "Model Router: New Chat Session",
-        "icon": "$(add)"
-      },
-      {
-        "command": "modelRouter.switchSession",
-        "title": "Model Router: Switch Session",
-        "icon": "$(arrow-swap)"
-      },
-      {
-        "command": "modelRouter.searchHistory",
-        "title": "Model Router: Search History",
-        "icon": "$(search)"
-      },
-      {
-        "command": "modelRouter.showSplitView",
-        "title": "Model Router: Show Split View",
-        "icon": "$(split-horizontal)"
-      },
-      {
-        "command": "modelRouter.multiModelChat",
-        "title": "Model Router: Multi-Model Chat",
-        "icon": "$(layers)"
-      },
-      {
-        "command": "modelRouter.createTaskPlan",
-        "title": "Model Router: Create Task Plan",
-        "icon": "$(list-tree)"
-      },
-      {
-        "command": "modelRouter.executeTaskPlan",
-        "title": "Model Router: Execute Task Plan",
-        "icon": "$(run)"
-      },
-      {
-        "command": "modelRouter.optimizePrompt",
-        "title": "Model Router: Optimize Prompt",
-        "icon": "$(lightbulb)"
-      },
-      {
-        "command": "modelRouter.analyzeCode",
-        "title": "Model Router: Analyze Code",
-        "icon": "$(search-view)"
-      },
-      {
-        "command": "modelRouter.reviewPullRequest",
-        "title": "Model Router: Review Pull Request",
-        "icon": "$(git-pull-request)"
-      }
-    ],
-    "menus": {
-      "editor/context": [
-        {
-          "command": "modelRouter.explainCode",
-          "group": "modelRouter@1",
-          "when": "editorTextFocus && editorHasSelection"
-        },
-        {
-          "command": "modelRouter.generateTests",
-          "group": "modelRouter@2",
-          "when": "editorTextFocus && editorHasSelection"
-        },
-        {
-          "command": "modelRouter.refactorCode",
-          "group": "modelRouter@3",
-          "when": "editorTextFocus && editorHasSelection"
-        },
-        {
-          "command": "modelRouter.findBugs",
-          "group": "modelRouter@4",
-          "when": "editorTextFocus && editorHasSelection"
-        },
-        {
-          "command": "modelRouter.addComments",
-          "group": "modelRouter@5",
-          "when": "editorTextFocus && editorHasSelection"
-        }
-      ],
-      "commandPalette": [
-        {
-          "command": "modelRouter.chat",
-          "icon": "$(comment-discussion)"
-        },
-        {
-          "command": "modelRouter.routeOnce",
-          "icon": "$(search)"
-        },
-        {
-          "command": "modelRouter.setApiKey",
-          "icon": "$(key)"
-        },
-        {
-          "command": "modelRouter.switchMode",
-          "icon": "$(settings-gear)"
-        },
-        {
-          "command": "modelRouter.openConfig",
-          "icon": "$(edit)"
-        },
-        {
-          "command": "modelRouter.showCosts",
-          "icon": "$(graph)"
-        },
-        {
-          "command": "modelRouter.testConnection",
-          "icon": "$(plug)"
-        },
-        {
-          "command": "modelRouter.startVoiceControl",
-          "icon": "$(mic)"
-        },
-        {
-          "command": "modelRouter.stopVoiceControl",
-          "icon": "$(mic-off)"
-        },
-        {
-          "command": "modelRouter.toggleVoiceControl",
-          "icon": "$(mic-filled)"
-        },
-        {
-          "command": "modelRouter.voiceSettings",
-          "icon": "$(settings-gear)"
-        },
-        {
-          "command": "modelRouter.voicePermissions",
-          "icon": "$(shield)"
-        },
-        {
-          "command": "modelRouter.chat.quickPrompt",
-          "icon": "$(comment)"
-        },
-        {
-          "command": "modelRouter.chat.tools",
-          "icon": "$(tools)"
-        },
-        {
-          "command": "modelRouter.chat.planCurrent",
-          "icon": "$(rocket)"
-        },
-        {
-          "command": "modelRouter.chat.executePlan",
-          "icon": "$(run-all)"
-        },
-        {
-          "command": "modelRouter.chat.cancelPlanExecution",
-          "icon": "$(debug-stop)"
-        },
-        {
-          "command": "modelRouter.multiModelChat",
-          "icon": "$(layers)"
-        },
-        {
-          "command": "modelRouter.createTaskPlan",
-          "icon": "$(list-tree)"
-        },
-        {
-          "command": "modelRouter.executeTaskPlan",
-          "icon": "$(run)"
-        },
-        {
-          "command": "modelRouter.optimizePrompt",
-          "icon": "$(lightbulb)"
-        },
-        {
-          "command": "modelRouter.analyzeCode",
-          "icon": "$(search-view)"
-        },
-        {
-          "command": "modelRouter.reviewPullRequest",
-          "icon": "$(git-pull-request)"
-        }
-      ]
-    },
-    "keybindings": [
-      {
-        "command": "modelRouter.openChatUI",
-        "key": "ctrl+shift+g",
-        "mac": "cmd+shift+g",
-        "when": "!terminalFocus"
-      },
-      {
-        "command": "modelRouter.startVoiceControl",
-        "key": "ctrl+shift+v",
-        "mac": "cmd+shift+v",
-        "when": "!terminalFocus"
-      },
-      {
-        "command": "modelRouter.explainCode",
-        "key": "ctrl+shift+e",
-        "mac": "cmd+shift+e",
-        "when": "editorTextFocus && editorHasSelection"
-      },
-      {
-        "command": "modelRouter.generateTests",
-        "key": "ctrl+shift+t",
-        "mac": "cmd+shift+t",
-        "when": "editorTextFocus && editorHasSelection"
-      },
-      {
-        "command": "modelRouter.refactorCode",
-        "key": "ctrl+shift+r",
-        "mac": "cmd+shift+r",
-        "when": "editorTextFocus && editorHasSelection"
+        "command": "modelRouter.experimental.testFeatures",
+        "title": "🧪 Experimental: Test All Features",
+        "category": "Model Router Experimental"
       }
     ],
     "views": {
       "explorer": [
         {
-          "type": "webview",
           "id": "guidoVoiceControl",
-          "name": "🎤 Guido Voice Control",
-          "when": "config.modelRouter.voice.enabled",
-          "icon": "$(mic)"
-        },
-        {
-          "type": "webview",
-          "id": "modelRouterChatDock",
-          "name": "💬 Model Router Chat (Dock)",
-          "when": "config.modelRouter.chat.showDockView",
-          "icon": "$(comment-discussion)"
-        },
-        {
-          "type": "webview",
-          "id": "modelRouterSplitView",
-          "name": "⚡ Model Router Split View",
-          "icon": "$(split-horizontal)"
+          "name": "Guido Voice Control",
+          "when": "modelRouter.voiceEnabled"
         }
       ]
     },
@@ -458,41 +129,90 @@
         {
           "id": "guido",
           "title": "Guido",
-          "icon": {
-            "light": "resources/activity/light/guido_activity_light.svg",
-            "dark": "resources/activity/dark/guido_activity_dark.svg"
-          }
+          "icon": "$(mic)"
         }
       ]
+    },
+    "configuration": {
+      "title": "Model Router",
+      "properties": {
+        "modelRouter.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Model Router"
+        },
+        "modelRouter.defaultModel": {
+          "type": "string",
+          "default": "gpt-4o-mini",
+          "description": "Default AI model to use"
+        },
+        "modelRouter.voice.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable voice control features"
+        },
+        "modelRouter.voice.wakeWord": {
+          "type": "string",
+          "default": "Guido",
+          "description": "Wake word for voice control"
+        },
+        "modelRouter.voice.language": {
+          "type": "string",
+          "default": "de",
+          "description": "Voice recognition language"
+        },
+        "modelRouter.experimental.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable experimental features"
+        },
+        "modelRouter.experimental.emotionDetection": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable emotion detection"
+        },
+        "modelRouter.experimental.contextAwareness": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable context awareness"
+        },
+        "modelRouter.experimental.adaptiveInterface": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable adaptive interface"
+        },
+        "modelRouter.experimental.multilingual": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable multilingual processing"
+        },
+        "modelRouter.experimental.personalityAdaptation": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable personality adaptation"
+        }
+      }
     }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile",
-    "test": "node --test ./out/test/**/*.js",
-    "package": "vsce package",
+    "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
-    "docs:toc": "node scripts/generateToc.mjs"
+    "test": "node ./out/test/runTest.js"
   },
   "devDependencies": {
-    "@types/dom-speech-recognition": "^0.0.6",
-    "@types/node": "^20.12.12",
     "@types/vscode": "^1.99.0",
-    "@typescript-eslint/eslint-plugin": "^7.8.0",
-    "@typescript-eslint/parser": "^7.8.0",
-    "eslint": "^8.57.0",
-    "typescript": "^5.9.2",
-    "vsce": "^2.15.0"
+    "@types/node": "20.x",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "typescript": "^5.0.0",
+    "@types/dom-speech-recognition": "^0.1.0"
   },
   "dependencies": {
-    "yaml": "^2.4.2"
+    "js-yaml": "^4.1.0"
   },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/your-username/model-router.git"
-  },
-  "license": "MIT",
   "l10n": "./l10n"
 }

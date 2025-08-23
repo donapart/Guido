@@ -4,6 +4,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import * as vscode from "vscode";
 import YAML from "yaml";
 import { VoiceConfig } from "./voice/types";
 
@@ -67,7 +68,14 @@ export interface PrivacyConfig {
 }
 
 export interface ProfileConfig {
-  mode: "auto" | "speed" | "quality" | "cheap" | "local-only" | "offline" | "privacy-strict";
+  mode:
+    | "auto"
+    | "speed"
+    | "quality"
+    | "cheap"
+    | "local-only"
+    | "offline"
+    | "privacy-strict";
   budget?: BudgetConfig;
   privacy?: PrivacyConfig;
   voice?: VoiceConfig; // Voice configuration
@@ -112,18 +120,21 @@ export class ConfigLoader {
    */
   loadConfig(filePath: string): RouterConfig {
     const absolutePath = path.resolve(filePath);
-    
+
     if (!fs.existsSync(absolutePath)) {
-      throw new ConfigError(`Configuration file not found: ${absolutePath}`, absolutePath);
+      throw new ConfigError(
+        `Configuration file not found: ${absolutePath}`,
+        absolutePath
+      );
     }
 
     try {
       const stats = fs.statSync(absolutePath);
-      
+
       // Return cached config if file hasn't changed
       if (
-        this.cachedConfig && 
-        this.configPath === absolutePath && 
+        this.cachedConfig &&
+        this.configPath === absolutePath &&
         this.lastModified === stats.mtimeMs
       ) {
         return this.cachedConfig;
@@ -144,21 +155,30 @@ export class ConfigLoader {
       if (error instanceof ConfigError) {
         throw error;
       }
-      
+
       if (error instanceof Error) {
-        throw new ConfigError(`Failed to parse configuration: ${error.message}`, absolutePath);
+        throw new ConfigError(
+          `Failed to parse configuration: ${error.message}`,
+          absolutePath
+        );
       }
-      
-      throw new ConfigError(`Unknown error loading configuration`, absolutePath);
+
+      throw new ConfigError(
+        `Unknown error loading configuration`,
+        absolutePath
+      );
     }
   }
 
   /**
    * Watch configuration file for changes
    */
-  watchConfig(filePath: string, callback: (config: RouterConfig) => void): void {
+  watchConfig(
+    filePath: string,
+    callback: (config: RouterConfig) => void
+  ): void {
     const absolutePath = path.resolve(filePath);
-    
+
     fs.watchFile(absolutePath, { interval: 1000 }, () => {
       try {
         const config = this.loadConfig(absolutePath);
@@ -197,7 +217,9 @@ export class ConfigLoader {
     }
 
     if (!config.profiles[config.activeProfile]) {
-      throw new ConfigError(`Active profile '${config.activeProfile}' not found in profiles`);
+      throw new ConfigError(
+        `Active profile '${config.activeProfile}' not found in profiles`
+      );
     }
 
     // Validate each profile
@@ -206,16 +228,29 @@ export class ConfigLoader {
     }
   }
 
-  private validateProfile(profile: any, profileName: string): asserts profile is ProfileConfig {
+  private validateProfile(
+    profile: any,
+    profileName: string
+  ): asserts profile is ProfileConfig {
     const prefix = `Profile '${profileName}'`;
 
     if (!profile || typeof profile !== "object") {
       throw new ConfigError(`${prefix} must be an object`);
     }
 
-    const validModes = ["auto", "speed", "quality", "cheap", "local-only", "offline", "privacy-strict"];
+    const validModes = [
+      "auto",
+      "speed",
+      "quality",
+      "cheap",
+      "local-only",
+      "offline",
+      "privacy-strict",
+    ];
     if (!profile.mode || !validModes.includes(profile.mode)) {
-      throw new ConfigError(`${prefix} mode must be one of: ${validModes.join(", ")}`);
+      throw new ConfigError(
+        `${prefix} mode must be one of: ${validModes.join(", ")}`
+      );
     }
 
     if (!Array.isArray(profile.providers) || profile.providers.length === 0) {
@@ -236,17 +271,26 @@ export class ConfigLoader {
       throw new ConfigError(`${prefix} routing rules must be an array`);
     }
 
-    if (!profile.routing.default || !Array.isArray(profile.routing.default.prefer)) {
+    if (
+      !profile.routing.default ||
+      !Array.isArray(profile.routing.default.prefer)
+    ) {
       throw new ConfigError(`${prefix} routing must have default.prefer array`);
     }
 
     // Validate routing rules
     for (let i = 0; i < profile.routing.rules.length; i++) {
-      this.validateRoutingRule(profile.routing.rules[i], `${prefix} routing rule[${i}]`);
+      this.validateRoutingRule(
+        profile.routing.rules[i],
+        `${prefix} routing rule[${i}]`
+      );
     }
   }
 
-  private validateProvider(provider: any, prefix: string): asserts provider is ProviderConfig {
+  private validateProvider(
+    provider: any,
+    prefix: string
+  ): asserts provider is ProviderConfig {
     if (!provider || typeof provider !== "object") {
       throw new ConfigError(`${prefix} must be an object`);
     }
@@ -257,7 +301,9 @@ export class ConfigLoader {
 
     const validKinds = ["openai-compat", "ollama"];
     if (!provider.kind || !validKinds.includes(provider.kind)) {
-      throw new ConfigError(`${prefix} kind must be one of: ${validKinds.join(", ")}`);
+      throw new ConfigError(
+        `${prefix} kind must be one of: ${validKinds.join(", ")}`
+      );
     }
 
     if (!provider.baseUrl || typeof provider.baseUrl !== "string") {
@@ -274,7 +320,10 @@ export class ConfigLoader {
     }
   }
 
-  private validateModel(model: any, prefix: string): asserts model is ModelConfig {
+  private validateModel(
+    model: any,
+    prefix: string
+  ): asserts model is ModelConfig {
     if (!model || typeof model !== "object") {
       throw new ConfigError(`${prefix} must be an object`);
     }
@@ -283,7 +332,10 @@ export class ConfigLoader {
       throw new ConfigError(`${prefix} must have a non-empty name`);
     }
 
-    if (model.context !== undefined && (typeof model.context !== "number" || model.context <= 0)) {
+    if (
+      model.context !== undefined &&
+      (typeof model.context !== "number" || model.context <= 0)
+    ) {
       throw new ConfigError(`${prefix} context must be a positive number`);
     }
 
@@ -296,26 +348,41 @@ export class ConfigLoader {
     }
   }
 
-  private validateModelPrice(price: any, prefix: string): asserts price is ModelPrice {
+  private validateModelPrice(
+    price: any,
+    prefix: string
+  ): asserts price is ModelPrice {
     if (!price || typeof price !== "object") {
       throw new ConfigError(`${prefix} must be an object`);
     }
 
     if (typeof price.inputPerMTok !== "number" || price.inputPerMTok < 0) {
-      throw new ConfigError(`${prefix} inputPerMTok must be a non-negative number`);
+      throw new ConfigError(
+        `${prefix} inputPerMTok must be a non-negative number`
+      );
     }
 
     if (typeof price.outputPerMTok !== "number" || price.outputPerMTok < 0) {
-      throw new ConfigError(`${prefix} outputPerMTok must be a non-negative number`);
+      throw new ConfigError(
+        `${prefix} outputPerMTok must be a non-negative number`
+      );
     }
 
-    if (price.cachedInputPerMTok !== undefined && 
-        (typeof price.cachedInputPerMTok !== "number" || price.cachedInputPerMTok < 0)) {
-      throw new ConfigError(`${prefix} cachedInputPerMTok must be a non-negative number`);
+    if (
+      price.cachedInputPerMTok !== undefined &&
+      (typeof price.cachedInputPerMTok !== "number" ||
+        price.cachedInputPerMTok < 0)
+    ) {
+      throw new ConfigError(
+        `${prefix} cachedInputPerMTok must be a non-negative number`
+      );
     }
   }
 
-  private validateRoutingRule(rule: any, prefix: string): asserts rule is RoutingRule {
+  private validateRoutingRule(
+    rule: any,
+    prefix: string
+  ): asserts rule is RoutingRule {
     if (!rule || typeof rule !== "object") {
       throw new ConfigError(`${prefix} must be an object`);
     }
@@ -339,7 +406,9 @@ export class ConfigLoader {
     // Validate prefer format (providerId:modelName)
     for (const preference of rule.then.prefer) {
       if (typeof preference !== "string" || !preference.includes(":")) {
-        throw new ConfigError(`${prefix} then.prefer items must be in format 'providerId:modelName'`);
+        throw new ConfigError(
+          `${prefix} then.prefer items must be in format 'providerId:modelName'`
+        );
       }
     }
   }
@@ -377,7 +446,7 @@ export class ConfigLoader {
                   caps: ["cheap", "tools", "json"],
                   price: {
                     inputPerMTok: 0.15,
-                    outputPerMTok: 0.60,
+                    outputPerMTok: 0.6,
                     cachedInputPerMTok: 0.08,
                   },
                 },
@@ -421,5 +490,32 @@ export class ConfigLoader {
     const yamlContent = YAML.stringify(defaultConfig, { indent: 2 });
 
     fs.writeFileSync(absolutePath, yamlContent, "utf8");
+  }
+}
+
+/**
+ * Load configuration from the default location
+ */
+export async function loadConfiguration(): Promise<ProfileConfig> {
+  const configLoader = ConfigLoader.getInstance();
+  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+
+  if (!workspaceRoot) {
+    throw new ConfigError("No workspace folder found");
+  }
+
+  const configPath = path.join(workspaceRoot, "router.config.yaml");
+
+  try {
+    const config = configLoader.loadConfig(configPath);
+    return config.profiles[config.activeProfile];
+  } catch (error) {
+    if (error instanceof ConfigError && error.message.includes("not found")) {
+      // Create default config if it doesn't exist
+      configLoader.createDefaultConfig(configPath);
+      const config = configLoader.loadConfig(configPath);
+      return config.profiles[config.activeProfile];
+    }
+    throw error;
   }
 }

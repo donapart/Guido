@@ -1,2007 +1,689 @@
 /**
- * VSCode Extension Entry Point for Model Router
+ * Main extension entry point
  */
 
-import * as vscode from "vscode";
-import * as fs from "fs";
-import * as path from "path";
-import { ChatDockViewProvider } from './webview/chatDockView';
-import { getActiveChatTargets, ChatTarget } from './webview/chatTargets';
-import { ChatPanel } from './webview/chatPanel';
-import { SplitViewProvider } from './webview/splitViewProvider';
-
-// Phase 3: Advanced AI Capabilities
-import { MultiModelManager } from './ai/multiModelManager';
-import { AITaskPlanner } from './ai/taskPlanner';
-import { AdvancedPromptingManager } from './ai/promptingManager';
-import { ContextAwareCodeAnalyzer } from './ai/codeAnalyzer';
-
-import { ConfigError, ConfigLoader, ProfileConfig } from "./config";
-import { createModelRouterMcpServer } from "./mcp/server";
-import { BudgetManager, PriceCalculator } from "./price";
-import { PromptClassifier } from "./promptClassifier";
-import { Provider } from "./providers/base";
-import { OllamaProvider } from "./providers/ollama";
-import { OpenAICompatProvider } from "./providers/openaiCompat";
-import { ModelRouter, RoutingResult } from "./router";
-import { getSecretHelper, initializeSecrets } from "./secret";
-import type { VoiceConfig } from "./voice/types";
-import { VoiceController } from "./voice/voiceController";
+import * as vscode from 'vscode';
+import { ModelRouter } from './router';
+import { loadConfiguration, ProfileConfig } from './config';
+import { VSCodeSecretManager } from './secret';
+import { OpenAICompatProvider } from './providers/openaiCompat';
+import { OllamaProvider } from './providers/ollama';
+import { VoiceController } from './voice/voiceController';
+import type { VoiceConfig } from './voice/types';
+import { ExperimentalVoiceFeatures } from './voice/experimental/advancedVoiceFeatures';
+import { ExperimentalRouting } from './router/experimental/advancedRouting';
+import { ExperimentalNLP } from './voice/experimental/naturalLanguageProcessor';
+import { ExperimentalUI } from './voice/webview/experimentalUI';
 
 interface ExtensionState {
-  router?: ModelRouter;
-  providers: Map<string, Provider>;
-  statusBar: vscode.StatusBarItem;
-  budgetManager: BudgetManager;
-  classifier?: PromptClassifier;
+  router: ModelRouter;
+  providers: Map<string, any>;
+  config: ProfileConfig;
+  secretManager: VSCodeSecretManager;
   voiceController?: VoiceController;
-  mcpServer?: ReturnType<typeof createModelRouterMcpServer>;
-  currentMode: string;
-  outputChannel: vscode.OutputChannel;
-  lastBudgetSummary?: string;
-  
-  // Phase 3: Advanced AI Capabilities
-  multiModelManager?: MultiModelManager;
-  taskPlanner?: AITaskPlanner;
-  promptingManager?: AdvancedPromptingManager;
-  codeAnalyzer?: ContextAwareCodeAnalyzer;
+  experimentalFeatures?: ExperimentalVoiceFeatures;
+  experimentalRouting?: ExperimentalRouting;
+  experimentalNLP?: ExperimentalNLP;
+  experimentalUI?: ExperimentalUI;
 }
 
-let state: ExtensionState;
 let extensionContext: vscode.ExtensionContext;
-// Chat-History (mit optionaler Persistenz)
-const chatHistory: { role: 'user'|'assistant'; content: string; meta?: Record<string, unknown> }[] = [];
-let chatHistoryLoaded = false;
-// Aktueller Plan (zuletzt generiert) & laufende Ausführung
-interface StoredPlan { raw: string; steps: string[]; originalUserPrompt: string; generatedAt: number; }
-let currentPlan: StoredPlan | undefined;
-let runningPlan: { index: number; abort?: AbortController; cancelled?: boolean } | undefined;
+let state: ExtensionState;
 
-async function loadPersistedChatHistory() {
-  if (chatHistoryLoaded) return;
-  try {
-    const cfg = vscode.workspace.getConfiguration('modelRouter');
-    if (!cfg.get<boolean>('chat.persistHistory', true)) { chatHistoryLoaded = true; return; }
-    const stored = extensionContext.globalState.get<{ role: 'user'|'assistant'; content: string; meta?: Record<string, unknown> }[]>('modelRouter.chat.history');
-    if (Array.isArray(stored)) chatHistory.push(...stored.slice(-1000));
-  } catch { /* ignore */ }
-  finally { chatHistoryLoaded = true; }
-}
-
-function persistChatHistory() {
-  try {
-    const cfg = vscode.workspace.getConfiguration('modelRouter');
-    if (!cfg.get<boolean>('chat.persistHistory', true)) return;
-    extensionContext.globalState.update('modelRouter.chat.history', chatHistory.slice(-1000));
-  } catch { /* ignore */ }
-}
-
-export async function activate(context: vscode.ExtensionContext): Promise<void> {
-  console.log("Aktiviere Model Router Extension...");
-
-  // Store extension context globally
+export async function activate(context: vscode.ExtensionContext) {
   extensionContext = context;
-
-  // Initialize extension state
-  state = {
-    providers: new Map(),
-    statusBar: vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100),
-    budgetManager: new BudgetManager(context.globalState),
-    currentMode: "auto",
-    outputChannel: vscode.window.createOutputChannel("Model Router"),
-  };
-
-  // Initialize secret management
-  initializeSecrets(context);
-
-  // Setup status bar
-  state.statusBar.command = "modelRouter.switchMode";
-  state.statusBar.show();
-  await updateStatusBar();
-
-  // Budget Listener für Live-Updates
-  state.budgetManager.onTransaction(() => {
-    // Verzögert ausführen, um Schreibvorgang abzuschließen
-    setTimeout(() => {
-      updateStatusBar();
-    }, 50);
-  });
-
-  // Load initial configuration
+  
   try {
-    await loadConfiguration();
-  } catch (error) {
-  vscode.window.showErrorMessage(`Fehler beim Laden der Konfiguration: ${error instanceof Error ? error.message : String(error)}`);
-  }
-
-  // Initialize Phase 3 Advanced AI Capabilities
-  initializePhase3Features();
-
-  // Register commands
-  registerCommands(context);
-
-  // Register docked chat view provider
-  try {
-    const dockProvider = new ChatDockViewProvider(extensionContext.extensionUri);
-    context.subscriptions.push(vscode.window.registerWebviewViewProvider(ChatDockViewProvider.viewType, dockProvider, { webviewOptions: { retainContextWhenHidden: true } }));
-  } catch (e) {
-    state.outputChannel.appendLine('Dock View Registrierung fehlgeschlagen: ' + (e instanceof Error ? e.message : String(e)));
-  }
-
-  // Register split view provider
-  try {
-    const splitViewProvider = new SplitViewProvider(extensionContext.extensionUri);
-    context.subscriptions.push(vscode.window.registerWebviewViewProvider(SplitViewProvider.viewType, splitViewProvider, { webviewOptions: { retainContextWhenHidden: true } }));
-  } catch (e) {
-    state.outputChannel.appendLine('Split View Registrierung fehlgeschlagen: ' + (e instanceof Error ? e.message : String(e)));
-  }
-
-  // Watch for configuration changes
-  const configWatcher = vscode.workspace.onDidChangeConfiguration(async (event) => {
-    if (event.affectsConfiguration("modelRouter")) {
-      await loadConfiguration();
-    }
-  });
-
-  context.subscriptions.push(
-    state.statusBar,
-    state.outputChannel,
-    configWatcher
-  );
-
-  // Start MCP server if enabled
-  await startMcpServerIfEnabled();
-
-  vscode.window.showInformationMessage("Model Router Extension aktiviert!");
-}
-
-/**
- * Initialize Phase 3 Advanced AI Capabilities
- */
-function initializePhase3Features(): void {
-  try {
-    if (state.router && state.providers.size > 0) {
-      // Initialize Multi-Model Manager
-      state.multiModelManager = new MultiModelManager(state.router, state.providers);
-      
-      // Initialize AI Task Planner
-      state.taskPlanner = new AITaskPlanner(state.router, state.providers);
-      
-      // Initialize Advanced Prompting Manager
-      state.promptingManager = new AdvancedPromptingManager(state.router, state.providers);
-      
-      // Initialize Context-Aware Code Analyzer
-      state.codeAnalyzer = new ContextAwareCodeAnalyzer(state.router, state.providers);
-      
-      state.outputChannel.appendLine('Phase 3 Advanced AI Capabilities initialized');
-    } else {
-      state.outputChannel.appendLine('Phase 3 initialization skipped - router or providers not ready');
-    }
-  } catch (error) {
-    state.outputChannel.appendLine(`Phase 3 initialization failed: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-export function deactivate(): void {
-  if (state.mcpServer) {
-    state.mcpServer.stop();
-  }
-  console.log("Model Router Extension deaktiviert");
-}
-
-/**
- * Register all VSCode commands
- */
-function registerCommands(context: vscode.ExtensionContext): void {
-  const commands = [
-    vscode.commands.registerCommand("modelRouter.chat", handleChatCommand),
-  vscode.commands.registerCommand("modelRouter.openChatUI", async () => {
-      try {
-        const extUri = extensionContext.extensionUri;
-        ChatPanel.createOrShow(extUri);
-        // Modelle & History an Webview senden
-    const targets = getActiveChatTargets();
-    if (targets.length && state.router) {
-          try {
-            const profile = state.router.getProfile();
-            const models: string[] = [];
-            for (const prov of profile.providers) {
-              for (const m of prov.models) { if (!models.includes(m.name)) models.push(m.name); }
-            }
-      if (!chatHistoryLoaded) await loadPersistedChatHistory();
-    targets.forEach(t => { t.sendModels(models.sort()); t.sendHistory(chatHistory.slice(-200)); });
-          } catch {/* ignore */}
-        }
-      } catch (e) {
-        vscode.window.showErrorMessage(`Chat UI Fehler: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    }),
-    vscode.commands.registerCommand('modelRouter.chat.sendFromWebview', async (text: string, modelOverride?: string, attachmentUris?: string[]) => {
-      if (!state.router) { vscode.window.showErrorMessage('Router nicht initialisiert'); return; }
-  const targets = getActiveChatTargets();
-  if (!targets.length) return; // Keine aktive Oberfläche
-      try {
-        const ctx = { prompt: text, mode: state.currentMode };
-        let providerToUse: Provider | undefined;
-        let modelName: string | undefined;
-        let modelPrice: { inputPerMTok: number; outputPerMTok: number; } | undefined;
-        let providerId: string | undefined;
-        let routed: RoutingResult | undefined;
-        if (modelOverride) {
-          const profile = state.router.getProfile();
-            const provCfg = profile.providers.find(p => p.models.some(m => m.name === modelOverride));
-            if (provCfg) {
-              providerId = provCfg.id;
-              providerToUse = state.providers.get(provCfg.id);
-              modelName = modelOverride;
-              modelPrice = provCfg.models.find(m => m.name === modelOverride)?.price;
-              targets.forEach(t => t.sendInfo(`Override Modell: ${providerId}:${modelName}`));
-            }
-        }
-        if (!providerToUse) {
-          routed = await state.router.route(ctx);
-          providerToUse = routed.provider;
-          modelName = routed.modelName;
-          modelPrice = routed.model.price;
-          providerId = routed.providerId;
-        }
-        // --- Attachments Verarbeitung ---
-        let attachmentNote = '';
-        if (attachmentUris && attachmentUris.length) {
-          const summaries = await readAttachmentSummaries(attachmentUris);
-          if (summaries.length) {
-            attachmentNote = '\n\n[Anhänge]\n' + summaries.map(s => `### ${s.name}\n${s.snippet}`).join('\n');
-          }
-        }
-        const fullPrompt = text + attachmentNote;
-        // Kosten-Schätzung vorab
-        if (providerToUse && modelName && modelPrice) {
-          try {
-            const est = PriceCalculator.estimateCost(fullPrompt, { price: modelPrice } as any, modelName); // eslint-disable-line @typescript-eslint/no-explicit-any
-            targets.forEach(t => t.sendInfo(`Geschätzte Kosten: $${est.totalCost.toFixed(4)} (Tokens ~${est.inputTokens})`));
-          } catch {/* ignore */}
-        }
-        if (!providerToUse || !modelName) {
-          throw new Error('Kein Modell/Provider bestimmt');
-        }
-        let contentAccum = '';
-        for await (const chunk of providerToUse.chat(modelName, [{ role:'user', content: fullPrompt }])) {
-          if (chunk.type === 'text' && chunk.data) {
-            contentAccum += chunk.data;
-            targets.forEach(t => t.streamDelta(chunk.data));
-          } else if (chunk.type === 'done') {
-            if (chunk.data?.usage && modelPrice && providerId && modelName) {
-              try {
-                const actualCost = PriceCalculator.calculateActualCost(
-                  chunk.data.usage,
-                  modelPrice,
-                  modelName,
-                  providerId
-                );
-                await state.budgetManager.recordTransaction(
-                  providerId,
-                  modelName,
-                  actualCost.totalCost,
-                  actualCost.inputTokens,
-                  actualCost.outputTokens
-                );
-                targets.forEach(t => t.streamDone({ usage: chunk.data?.usage, cost: actualCost }));
-              } catch {
-                targets.forEach(t => t.streamDone({ usage: chunk.data?.usage }));
-              }
-            } else {
-              targets.forEach(t => t.streamDone());
-            }
-            break;
-          } else if (chunk.type === 'error') {
-            targets.forEach(t => t.showError(chunk.error || 'Unbekannter Fehler'));
-            break;
-          }
-        }
-        chatHistory.push({ role: 'user', content: text, meta: { attachments: attachmentUris, override: modelOverride } });
-        chatHistory.push({ role: 'assistant', content: contentAccum, meta: { providerId, modelName } });
-        if (chatHistory.length > 1000) chatHistory.splice(0, chatHistory.length - 1000);
-        persistChatHistory();
-      } catch (err) {
-        getActiveChatTargets().forEach(t => t.showError(err instanceof Error ? err.message : String(err)));
-      }
-    }),
-    vscode.commands.registerCommand('modelRouter.chat.tools', async () => {
-      const selection = await vscode.window.showQuickPick([
-        'Routing-Simulation (letzte Nutzer-Nachricht)',
-        'Kosten / Budget Übersicht',
-        'Letzte Antwort erneut senden',
-        'Verlauf löschen'
-      ], { placeHolder: 'Chat Tools' });
-      if (!selection) return;
-      const targets = getActiveChatTargets();
-      switch (selection) {
-        case 'Routing-Simulation (letzte Nutzer-Nachricht)': {
-          const lastUser = [...chatHistory].reverse().find(m => m.role === 'user');
-          if (!lastUser) { vscode.window.showWarningMessage('Keine Nutzer-Nachricht gefunden'); return; }
-          if (!state.router) { vscode.window.showErrorMessage('Router nicht initialisiert'); return; }
-          try {
-            const sim = await state.router.simulateRoute({ prompt: lastUser.content, mode: state.currentMode });
-            let textInfo = 'Routing Simulation:\n';
-            if (sim.result) textInfo += `Gewählt: ${sim.result.providerId}:${sim.result.modelName} (Score ${sim.result.score})\n`;
-            textInfo += 'Top Alternativen:\n';
-            sim.alternatives.slice(0,5).forEach(a => { textInfo += ` - ${a.providerId}:${a.modelName} (Score ${a.score})${a.available ? '' : ' [unavailable]'}\n`; });
-            targets.forEach(t => t.sendInfo(textInfo));
-          } catch (e) { targets.forEach(t => t.sendInfo('Fehler Simulation: ' + (e as Error).message)); }
-          break; }
-        case 'Kosten / Budget Übersicht': {
-          try {
-            const stats = await state.budgetManager.getSpendingStats();
-            const usage = await state.budgetManager.getBudgetUsage();
-            targets.forEach(t => t.sendInfo(`Kosten: total $${stats.totalSpent.toFixed(4)} | heute $${usage.dailySpent.toFixed(4)} | Monat $${usage.monthlySpent.toFixed(4)}`));
-          } catch (e) { targets.forEach(t => t.sendInfo('Fehler Kosten: ' + (e as Error).message)); }
-          break; }
-        case 'Letzte Antwort erneut senden': {
-          const lastUser = [...chatHistory].reverse().find(m => m.role === 'user');
-          if (lastUser) vscode.commands.executeCommand('modelRouter.chat.sendFromWebview', lastUser.content);
-          break; }
-        case 'Verlauf löschen': {
-          chatHistory.splice(0, chatHistory.length); persistChatHistory(); targets.forEach(t => t.sendInfo('Verlauf gelöscht')); break; }
-      }
-    }),
-    vscode.commands.registerCommand('modelRouter.chat.planCurrent', async () => {
-      const lastUser = [...chatHistory].reverse().find(m => m.role === 'user');
-      if (!lastUser) { vscode.window.showWarningMessage('Kein letzter Nutzer-Prompt'); return; }
-      if (!state.router) { vscode.window.showErrorMessage('Router nicht initialisiert'); return; }
-      const plannerPrompt = `Analysiere die folgende Anfrage und erstelle einen nummerierten, kurzen Umsetzungsplan mit maximal 7 Schritten. Jede Zeile: "Schritt X: ..."\n\nAnfrage:\n${lastUser.content}`;
-      try {
-        const routed = await state.router.route({ prompt: plannerPrompt, mode: 'auto' });
-        const result = await routed.provider.chatComplete(routed.modelName, [{ role: 'user', content: plannerPrompt }], { maxTokens: 300, temperature: 0.2 });
-        const planText = result.content.trim();
-        getActiveChatTargets().forEach(t => t.sendInfo('Plan:\n' + planText));
-        // Schritte parsen
-        const steps: string[] = [];
-        for (const line of planText.split(/\r?\n/)) {
-          const trimmed = line.trim();
-          if (!trimmed) continue;
-            const m = trimmed.match(/^(Schritt\s*\d+\s*:?|Step\s*\d+\s*:|\d+\.|\d+\)|-)\s*(.+)$/i);
-          if (m) {
-            // letzter capture (.+) oder alles nach ':'
-            const body = m[2] || trimmed.replace(/^(Schritt\s*\d+\s*:|Step\s*\d+\s*:|\d+[.)]|-)\s*/i,'');
-            steps.push(body.trim());
-          }
-        }
-        if (steps.length) {
-          currentPlan = { raw: planText, steps, originalUserPrompt: lastUser.content, generatedAt: Date.now() };
-          getActiveChatTargets().forEach(t => t.sendInfo(`Plan erkannt (${steps.length} Schritte). Mit "Execute Plan" starten.`));
-        } else {
-          getActiveChatTargets().forEach(t => t.sendInfo('Plan konnte nicht automatisch in Schritte zerlegt werden.'));
-        }
-        chatHistory.push({ role: 'assistant', content: '[Plan]\n' + result.content.trim(), meta: { kind: 'plan' } });
-        persistChatHistory();
-      } catch (e) {
-        vscode.window.showErrorMessage('Plan Fehler: ' + (e as Error).message);
-      }
-    }),
-    vscode.commands.registerCommand('modelRouter.chat.executePlan', async () => {
-      if (runningPlan) { vscode.window.showWarningMessage('Plan läuft bereits'); return; }
-      if (!currentPlan) { vscode.window.showWarningMessage('Kein Plan vorhanden. Erst "Plan / Agent" ausführen.'); return; }
-      if (!state.router) { vscode.window.showErrorMessage('Router nicht initialisiert'); return; }
-      const targets = getActiveChatTargets();
-  targets.forEach(t => t.sendInfo(`Starte Plan-Ausführung (${currentPlan?.steps.length || 0} Schritte)...`));
-      runningPlan = { index: 0 };
-      updateStatusBar();
-      for (let i = 0; i < currentPlan.steps.length; i++) {
-        if (!runningPlan || runningPlan.cancelled) break;
-        runningPlan.index = i;
-        updateStatusBar();
-        const step = currentPlan.steps[i];
-  targets.forEach(t => t.sendInfo(`▶ Schritt ${i + 1}/${currentPlan?.steps.length || 0}: ${step}`));
-        // Abort Controller für diesen Schritt
-        const ac = new AbortController();
-        runningPlan.abort = ac;
-        try {
-          // Routing für Schritt
-          const stepPrompt = `Ursprüngliche Anfrage:\n${currentPlan.originalUserPrompt}\n\nAktueller Plan (Kontext):\n${currentPlan.raw}\n\nFühre jetzt Schritt ${i + 1} aus: ${step}\nAntwort: Fokus auf konkrete Umsetzung.`;
-          const routed = await state.router.route({ prompt: stepPrompt, mode: state.currentMode });
-          const providerToUse = routed.provider;
-          const modelName = routed.modelName;
-          const modelPrice = routed.model.price;
-          const providerId = routed.providerId;
-          // Info
-          targets.forEach(t => t.sendInfo(`Modell für Schritt ${i + 1}: ${providerId}:${modelName}`));
-          let contentAccum = '';
-          try {
-            for await (const chunk of providerToUse.chat(modelName, [
-              { role: 'system', content: 'Du führst einen mehrstufigen Plan schrittweise aus.' },
-              { role: 'user', content: currentPlan.originalUserPrompt },
-              { role: 'assistant', content: 'Plan:\n' + currentPlan.raw },
-              { role: 'user', content: `Schritt ${i + 1}: ${step}` }
-            ], { signal: ac.signal })) {
-              if (runningPlan?.cancelled) { ac.abort(); break; }
-              if (chunk.type === 'text' && chunk.data) {
-                contentAccum += chunk.data;
-                targets.forEach(t => t.streamDelta(chunk.data));
-              } else if (chunk.type === 'done') {
-                if (chunk.data?.usage && modelPrice) {
-                  try {
-                    const actualCost = PriceCalculator.calculateActualCost(
-                      chunk.data.usage,
-                      modelPrice,
-                      modelName,
-                      providerId
-                    );
-                    await state.budgetManager.recordTransaction(
-                      providerId,
-                      modelName,
-                      actualCost.totalCost,
-                      actualCost.inputTokens,
-                      actualCost.outputTokens
-                    );
-                    targets.forEach(t => t.streamDone({ usage: chunk.data?.usage, cost: actualCost }));
-                  } catch {
-                    targets.forEach(t => t.streamDone({ usage: chunk.data?.usage }));
-                  }
-                } else {
-                  targets.forEach(t => t.streamDone());
-                }
-                break;
-              } else if (chunk.type === 'error') {
-                targets.forEach(t => t.showError(chunk.error || 'Fehler in Schritt'));
-                break;
-              }
-            }
-          } catch (err) {
-            if ((err as Error).name === 'AbortError') {
-              targets.forEach(t => t.sendInfo(`Schritt ${i + 1} abgebrochen.`));
-            } else {
-              targets.forEach(t => t.showError(`Schritt ${i + 1} Fehler: ${(err as Error).message}`));
-            }
-          }
-          chatHistory.push({ role: 'user', content: `[Plan Schritt ${i + 1}] ${step}` });
-          chatHistory.push({ role: 'assistant', content: contentAccum, meta: { providerId, modelName, planStep: i + 1 } });
-          persistChatHistory();
-        } catch (e) {
-          targets.forEach(t => t.showError(`Routing Fehler Schritt ${i + 1}: ${(e as Error).message}`));
-          break;
-        }
-      }
-      if (runningPlan && !runningPlan.cancelled) {
-        targets.forEach(t => t.sendInfo('Plan abgeschlossen.'));
-      } else if (runningPlan?.cancelled) {
-        targets.forEach(t => t.sendInfo('Plan-Ausführung gestoppt.'));
-      }
-      runningPlan = undefined;
-  updateStatusBar();
-    }),
-    vscode.commands.registerCommand('modelRouter.chat.cancelPlanExecution', () => {
-      if (!runningPlan) { vscode.window.showInformationMessage('Kein laufender Plan'); return; }
-      runningPlan.cancelled = true;
-      runningPlan.abort?.abort();
-      getActiveChatTargets().forEach(t => t.sendInfo('Abbruch angefordert...'));
-  updateStatusBar();
-    }),
-    vscode.commands.registerCommand('modelRouter.chat.quickPrompt', async () => {
-      const cfg = vscode.workspace.getConfiguration('modelRouter');
-      const compact = cfg.get<boolean>('chat.compactMode', false);
-      if (!compact) {
-        vscode.commands.executeCommand('modelRouter.openChatUI');
-        return;
-      }
-      const text = await vscode.window.showInputBox({ prompt: 'Chat Prompt eingeben' });
-      if (!text) return;
-      if (!state.router) { vscode.window.showErrorMessage('Router nicht initialisiert'); return; }
-      // Falls keine Oberfläche -> OutputChannel
-      if (!getActiveChatTargets().length) {
-        state.outputChannel.show(true);
-        state.outputChannel.appendLine(`> ${text}`);
-      }
-      vscode.commands.executeCommand('modelRouter.chat.sendFromWebview', text);
-    }),
-    vscode.commands.registerCommand("modelRouter.routeOnce", handleRouteOnceCommand),
-    vscode.commands.registerCommand("modelRouter.setApiKey", handleSetApiKeyCommand),
-    vscode.commands.registerCommand("modelRouter.switchMode", handleSwitchModeCommand),
-    vscode.commands.registerCommand("modelRouter.openConfig", handleOpenConfigCommand),
-    vscode.commands.registerCommand("modelRouter.showCosts", handleShowCostsCommand),
-    vscode.commands.registerCommand("modelRouter.testConnection", handleTestConnectionCommand),
-    vscode.commands.registerCommand("modelRouter.classifyPrompt", handleClassifyPromptCommand),
-    vscode.commands.registerCommand("modelRouter.simulateRouting", handleSimulateRoutingCommand),
-    vscode.commands.registerCommand("modelRouter.importApiKeys", handleImportApiKeysCommand),
-    vscode.commands.registerCommand("modelRouter.exportConfig", handleExportConfigCommand),
+    await initializeExtension();
     
-    // Voice Control Commands
-    vscode.commands.registerCommand("modelRouter.startVoiceControl", handleStartVoiceControlCommand),
-    vscode.commands.registerCommand("modelRouter.stopVoiceControl", handleStopVoiceControlCommand),
-    vscode.commands.registerCommand("modelRouter.toggleVoiceControl", handleToggleVoiceControlCommand),
-    vscode.commands.registerCommand("modelRouter.voiceSettings", handleVoiceSettingsCommand),
-    vscode.commands.registerCommand("modelRouter.voicePermissions", handleVoicePermissionsCommand),
-
-    // Editor Integration Commands
-    vscode.commands.registerCommand("modelRouter.explainCode", handleExplainCodeCommand),
-    vscode.commands.registerCommand("modelRouter.generateTests", handleGenerateTestsCommand),
-    vscode.commands.registerCommand("modelRouter.refactorCode", handleRefactorCodeCommand),
-    vscode.commands.registerCommand("modelRouter.findBugs", handleFindBugsCommand),
-    vscode.commands.registerCommand("modelRouter.addComments", handleAddCommentsCommand),
-
-    // Phase 2: Session Management Commands
-    vscode.commands.registerCommand("modelRouter.newSession", handleNewSessionCommand),
-    vscode.commands.registerCommand("modelRouter.switchSession", handleSwitchSessionCommand),
-    vscode.commands.registerCommand("modelRouter.searchHistory", handleSearchHistoryCommand),
-    vscode.commands.registerCommand("modelRouter.showSplitView", handleShowSplitViewCommand),
-
-    // Phase 3: Advanced AI Capabilities Commands
-    vscode.commands.registerCommand("modelRouter.multiModelChat", handleMultiModelChatCommand),
-    vscode.commands.registerCommand("modelRouter.createTaskPlan", handleCreateTaskPlanCommand),
-    vscode.commands.registerCommand("modelRouter.executeTaskPlan", handleExecuteTaskPlanCommand),
-    vscode.commands.registerCommand("modelRouter.optimizePrompt", handleOptimizePromptCommand),
-    vscode.commands.registerCommand("modelRouter.analyzeCode", handleAnalyzeCodeCommand),
-    vscode.commands.registerCommand("modelRouter.reviewPullRequest", handleReviewPullRequestCommand),
-  ];
-
-  context.subscriptions.push(...commands);
-}
-
-/**
- * Load and apply configuration
- */
-async function loadConfiguration(): Promise<void> {
-  try {
-    const configPath = getConfigPath();
-    const loader = ConfigLoader.getInstance();
-    const config = loader.loadConfig(configPath);
-    const profile = config.profiles[config.activeProfile];
-
-    // Clear existing providers
-    state.providers.clear();
-
-    // Initialize providers
-    await initializeProviders(profile);
-
-  // Create router with budget manager
-  state.router = new ModelRouter(profile, state.providers, state.budgetManager);
-
-    // Initialize classifier if enabled
-    const classifierEnabled = vscode.workspace
-      .getConfiguration("modelRouter")
-      .get<boolean>("enablePromptClassifier", false);
-
-    if (classifierEnabled) {
-      const ollamaProvider = state.providers.get("ollama");
-      state.classifier = new PromptClassifier(
-        {
-          enabled: true,
-          useLocalModel: !!ollamaProvider,
-          localModelProvider: "ollama",
-          localModelName: "llama3.3:70b-instruct",
-          fallbackToHeuristic: true,
-          cacheResults: true,
-        },
-        ollamaProvider
-      );
-    }
-
-    // Update mode from config
-    state.currentMode = profile.mode;
-  await updateStatusBar();
-
+    // Register commands
+    registerCommands(context);
+    
     // Initialize voice control if enabled
-    if (profile.voice?.enabled) {
-        await initializeVoiceControl(profile.voice);
-        // Voice State -> Chat Panel Bridge
-        if (state.voiceController) {
-          state.voiceController.addEventListener('stateChanged', (ev) => {
-            try {
-              const { ChatPanel } = require('./webview/chatPanel');
-              if (ChatPanel.current) {
-                const newState = typeof ev.data === 'string' ? ev.data : ev.data?.toString?.() || 'idle';
-                ChatPanel.current.sendVoiceState?.(newState);
-              }
-            } catch { /* ignore */ }
-          });
-        }
+    if (state.config.voice?.enabled) {
+      await initializeVoiceControl();
     }
-
-  state.outputChannel.appendLine(`Konfiguration geladen: ${profile.providers.length} Provider, Modus: ${profile.mode}${profile.voice?.enabled ? ', Voice: aktiv' : ''}`);
-  await updateStatusBar();
-
-  } catch (error) {
-    if (error instanceof ConfigError) {
-      throw error;
-    }
-    throw new Error(`Unerwarteter Fehler beim Laden der Konfiguration: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-/**
- * Initialize providers from configuration
- */
-async function initializeProviders(profile: ProfileConfig): Promise<void> {
-  const secretHelper = getSecretHelper();
-
-  for (const providerConfig of profile.providers) {
-    try {
-      let provider: Provider;
-
-      switch (providerConfig.kind) {
-        case "openai-compat": {
-          const apiKey = await secretHelper.getProviderApiKey(providerConfig.id);
-          if (!apiKey) {
-            state.outputChannel.appendLine(`⚠️ Kein API Key für Provider ${providerConfig.id}`);
-            continue;
-          }
-
-          provider = new OpenAICompatProvider({
-            ...providerConfig,
-            kind: "openai-compat",
-            apiKey,
-            models: providerConfig.models.map(m => m.name),
-          });
-          break;
-        }
-
-        case "ollama": {
-          provider = new OllamaProvider({
-            ...providerConfig,
-            kind: "ollama",
-            models: providerConfig.models.map(m => m.name),
-          });
-          break;
-        }
-
-        default:
-          state.outputChannel.appendLine(`⚠️ Unbekannter Provider-Typ: ${(providerConfig as any).kind}`);
-          continue;
-      }
-
-      state.providers.set(providerConfig.id, provider);
-      state.outputChannel.appendLine(`✓ Provider initialisiert: ${providerConfig.id}`);
-
-    } catch (error) {
-      state.outputChannel.appendLine(`❌ Fehler bei Provider ${providerConfig.id}: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-}
-
-/**
- * Update status bar display
- */
-async function updateStatusBar(): Promise<void> {
-  const mode = state.currentMode;
-  const providerCount = state.providers.size;
-  const icon = mode === "privacy-strict" || mode === "local-only" ? "$(shield)" : "$(rocket)";
-
-  let budgetPart = "";
-  try {
-    if (state.router) {
-      const profile = state.router.getProfile();
-      if (profile.budget) {
-        const usage = await state.budgetManager.getBudgetUsage();
-        const cfg = vscode.workspace.getConfiguration("modelRouter");
-        const show = cfg.get<boolean>("showBudgetInStatusBar", true);
-        const modeDisplay = cfg.get<string>("budgetDisplayMode", "compact");
-        if (show) {
-          if (profile.budget.dailyUSD) {
-            const daily = usage.dailySpent;
-            const limit = profile.budget.dailyUSD;
-            const pct = limit ? Math.min(100, (daily / limit) * 100) : 0;
-            if (modeDisplay === "compact") {
-              budgetPart = ` | $${daily.toFixed(2)}/${limit}`;
-            } else {
-              // detailed mode
-              let monthly = "";
-              if (profile.budget.monthlyUSD) {
-                const mpct = (usage.monthlySpent / profile.budget.monthlyUSD) * 100;
-                monthly = ` m:${usage.monthlySpent.toFixed(2)}/${profile.budget.monthlyUSD}`;
-                budgetPart = ` | d:${daily.toFixed(2)}/${limit} (${pct.toFixed(0)}%)${monthly} (${mpct.toFixed(0)}%)`;
-              } else {
-                budgetPart = ` | d:${daily.toFixed(2)}/${limit} (${pct.toFixed(0)}%)`;
-              }
-            }
-          } else if (usage.dailySpent > 0) {
-            budgetPart = ` | $${usage.dailySpent.toFixed(2)}`;
-          }
-        }
-      }
-    }
-  } catch (e) {
-    // ignore budget display errors
-  }
-
-  // Plan-Fortschritt
-  let planPart = "";
-  try {
-    if (runningPlan && currentPlan) {
-      const total = currentPlan.steps.length;
-      const current = Math.min(runningPlan.index + 1, total);
-      const label = runningPlan.cancelled ? 'Abbruch…' : 'Plan';
-      // Spinner nur wenn nicht abgeschlossen/abgebrochen
-      planPart = ` | $(sync~spin) ${label} ${current}/${total}`;
-    }
-  } catch { /* ignore */ }
-
-  state.statusBar.text = `${icon} Router: ${mode} (${providerCount})${budgetPart}${planPart}`;
-  const planTooltip = (runningPlan && currentPlan)
-    ? `\nPlan Fortschritt: Schritt ${Math.min(runningPlan.index + 1, currentPlan.steps.length)}/${currentPlan.steps.length}` + (runningPlan.cancelled ? ' (Abbruch angefordert)' : '')
-    : '';
-  state.statusBar.tooltip = `Model Router - Modus: ${mode}, Provider: ${providerCount}${planTooltip}${state.lastBudgetSummary ? "\n" + state.lastBudgetSummary : ""}`;
-}
-
-/**
- * Get configuration file path
- */
-function getConfigPath(): string {
-  const configSetting = vscode.workspace.getConfiguration("modelRouter").get<string>("configPath");
-  
-  if (!configSetting) {
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-    if (!workspaceFolder) {
-      throw new Error("Kein Workspace-Ordner geöffnet und Konfigurationspfad nicht gesetzt");
-    }
-
-    const defaultPath = vscode.Uri.joinPath(workspaceFolder.uri, "router.config.yaml").fsPath;
-    vscode.window.showWarningMessage(`Konfigurationspfad nicht gesetzt. Standardpfad wird verwendet: ${defaultPath}`);
-    return defaultPath;
-  }
-
-  // Replace workspace folder variable
-  if (configSetting.includes("${workspaceFolder}")) {
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-    if (!workspaceFolder) {
-      throw new Error("Kein Workspace-Ordner geöffnet");
-    }
-    return configSetting.replace("${workspaceFolder}", workspaceFolder.uri.fsPath);
-  }
-
-  return configSetting;
-}
-
-
-/**
- * Start MCP server if enabled
- */
-async function startMcpServerIfEnabled(): Promise<void> {
-  // Check if MCP should be enabled (could be a configuration option)
-  const mcpEnabled = process.argv.includes("--mcp");
-  
-  if (mcpEnabled && state.router) {
-    try {
-      state.mcpServer = createModelRouterMcpServer(state.router, state.providers);
-      await state.mcpServer.start();
-      state.outputChannel.appendLine("✓ MCP Server gestartet");
-    } catch (error) {
-      state.outputChannel.appendLine(`❌ MCP Server Fehler: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-}
-
-// Command Handlers
-
-async function handleChatCommand(): Promise<void> {
-  if (!state.router) {
-    vscode.window.showErrorMessage("Router nicht initialisiert");
-    return;
-  }
-
-  const prompt = await vscode.window.showInputBox({
-    prompt: "Frage oder Anweisung an die KI eingeben",
-    placeHolder: "z.B. Erkläre mir async/await in JavaScript",
-  });
-
-  if (!prompt) return;
-
-  const editor = vscode.window.activeTextEditor;
-  const context = {
-    prompt,
-    lang: editor?.document.languageId,
-    filePath: editor?.document.fileName,
-    fileSizeKB: editor ? Buffer.byteLength(editor.document.getText(), "utf8") / 1024 : undefined,
-    mode: state.currentMode,
-  };
-
-  try {
-    // Route the request
-    const result = await state.router.route(context);
     
-    // Estimate cost
-    const cost = PriceCalculator.estimateCost(prompt, result.model, result.providerId);
-
-    // Show routing info
-    state.outputChannel.clear();
-    state.outputChannel.appendLine(`🎯 Routing für: "${prompt.slice(0, 50)}..."`);
-    state.outputChannel.appendLine(`📍 Gewähltes Modell: ${result.providerId}:${result.modelName}`);
-    state.outputChannel.appendLine(`💰 Geschätzte Kosten: $${cost.totalCost.toFixed(4)}`);
-    state.outputChannel.appendLine(`🧠 Begründung: ${result.reasoning.join(", ")}`);
-    state.outputChannel.appendLine("─".repeat(50));
-    state.outputChannel.show(true);
-
-  // Execute chat (stream to OutputChannel)
-  // Hinweis: Vollständige Antwort könnte später für Folgefunktionen genutzt werden
-    for await (const chunk of result.provider.chat(result.modelName, [
-      { role: "user", content: prompt }
-    ])) {
-      if (chunk.type === "text" && chunk.data) {
-        state.outputChannel.append(chunk.data);
-      } else if (chunk.type === "done") {
-        state.outputChannel.appendLine("\n" + "─".repeat(50));
-        state.outputChannel.appendLine("✅ Chat abgeschlossen");
-        
-        // Record actual cost
-        if (chunk.data?.usage) {
-          const actualCost = PriceCalculator.calculateActualCost(
-            chunk.data.usage,
-            result.model.price!,
-            result.modelName,
-            result.providerId
-          );
-          
-          await state.budgetManager.recordTransaction(
-            result.providerId,
-            result.modelName,
-            actualCost.totalCost,
-            actualCost.inputTokens,
-            actualCost.outputTokens
-          );
-        }
-        break;
-      }
-    }
-
-  } catch (error) {
-    vscode.window.showErrorMessage(`Chat-Fehler: ${error instanceof Error ? error.message : String(error)}`);
-    state.outputChannel.appendLine(`❌ Fehler: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-async function handleRouteOnceCommand(): Promise<void> {
-  if (!state.router) {
-    vscode.window.showErrorMessage("Router nicht initialisiert");
-    return;
-  }
-
-  const editor = vscode.window.activeTextEditor;
-  if (!editor) {
-    vscode.window.showErrorMessage("Kein aktiver Editor");
-    return;
-  }
-
-  const selection = editor.selection;
-  const text = selection.isEmpty ? editor.document.getText() : editor.document.getText(selection);
-  
-  if (!text.trim()) {
-    vscode.window.showErrorMessage("Kein Text zum Routen gefunden");
-    return;
-  }
-
-  const context = {
-    prompt: text,
-    lang: editor.document.languageId,
-    filePath: editor.document.fileName,
-    fileSizeKB: Buffer.byteLength(text, "utf8") / 1024,
-    mode: state.currentMode,
-  };
-
-  try {
-    const simulation = await state.router.simulateRoute(context);
+    // Initialize experimental features
+    await initializeExperimentalFeatures();
     
-    if (simulation.result) {
-      const result = simulation.result;
-      const cost = PriceCalculator.estimateCost(text, result.model, result.providerId);
-      
-      const message = `🎯 Gewähltes Modell: ${result.providerId}:${result.modelName}\n` +
-                     `💰 Geschätzte Kosten: $${cost.totalCost.toFixed(4)}\n` +
-                     `📊 Score: ${result.score}\n` +
-                     `🧠 Begründung: ${result.reasoning.join(", ")}`;
-      
-      vscode.window.showInformationMessage(message, { modal: false });
-    } else {
-      vscode.window.showWarningMessage("Kein passendes Modell gefunden");
-    }
-
+    vscode.window.showInformationMessage('Guido Model Router Extension aktiviert! 🎤✨');
   } catch (error) {
-    vscode.window.showErrorMessage(`Routing-Fehler: ${error instanceof Error ? error.message : String(error)}`);
+    vscode.window.showErrorMessage(`Fehler beim Aktivieren der Extension: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
-async function handleSetApiKeyCommand(): Promise<void> {
-  const secretHelper = getSecretHelper();
-
-  // Get provider ID
-  const providerId = await vscode.window.showInputBox({
-    prompt: "Provider-ID eingeben",
-    placeHolder: "z.B. openai, deepseek, grok",
-  });
-
-  if (!providerId) return;
-
-  // Get API key
-  const apiKey = await vscode.window.showInputBox({
-    prompt: `API Key für ${providerId} eingeben`,
-    password: true,
-    placeHolder: "sk-...",
-  });
-
-  if (!apiKey) return;
-
-  try {
-    // Validate key format
-    const validation = secretHelper.validateApiKey(providerId, apiKey);
-    if (!validation.valid) {
-      const proceed = await vscode.window.showWarningMessage(
-        `API Key Warnung: ${validation.error}. Trotzdem speichern?`,
-        "Ja", "Nein"
-      );
-      if (proceed !== "Ja") return;
-    }
-
-    // Store the key
-    await secretHelper.setProviderApiKey(providerId, apiKey);
-
-    vscode.window.showInformationMessage(`✓ API Key für ${providerId} gespeichert`);
-
-    // Reload configuration to initialize the provider
-    await loadConfiguration();
-
-  } catch (error) {
-    vscode.window.showErrorMessage(`Fehler beim Speichern des API Keys: ${error instanceof Error ? error.message : String(error)}`);
+export function deactivate() {
+  // Cleanup
+  if (state.voiceController) {
+    state.voiceController.stopListening();
   }
-}
-
-async function handleSwitchModeCommand(): Promise<void> {
-  const modes = [
-    { label: "auto", description: "Automatische Modellauswahl" },
-    { label: "speed", description: "Schnellste Modelle bevorzugen" },
-    { label: "quality", description: "Hochwertigste Modelle bevorzugen" },
-    { label: "cheap", description: "Günstigste Modelle bevorzugen" },
-    { label: "local-only", description: "Nur lokale Modelle verwenden" },
-    { label: "offline", description: "Offline-Modus (nur lokal)" },
-    { label: "privacy-strict", description: "Strenger Datenschutz-Modus" },
-  ];
-
-  const selected = await vscode.window.showQuickPick(modes, {
-    placeHolder: `Aktueller Modus: ${state.currentMode}`,
-  });
-
-  if (selected) {
-    state.currentMode = selected.label;
-    updateStatusBar();
-    vscode.window.showInformationMessage(`Modus gewechselt zu: ${selected.label}`);
-  }
-}
-
-async function handleOpenConfigCommand(): Promise<void> {
-  try {
-    const configPath = getConfigPath();
-    const uri = vscode.Uri.file(configPath);
-    await vscode.window.showTextDocument(uri);
-  } catch (error) {
-    vscode.window.showErrorMessage(`Fehler beim Öffnen der Konfiguration: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-async function handleShowCostsCommand(): Promise<void> {
-  try {
-    const stats = await state.budgetManager.getSpendingStats();
-    const usage = await state.budgetManager.getBudgetUsage();
-
-    const message = `💰 Kosten-Übersicht:\n` +
-                   `Gesamt ausgegeben: $${stats.totalSpent.toFixed(4)}\n` +
-                   `Heute: $${usage.dailySpent.toFixed(4)}\n` +
-                   `Diesen Monat: $${usage.monthlySpent.toFixed(4)}\n` +
-                   `Transaktionen: ${stats.transactionCount}\n` +
-                   `Durchschnitt/Transaktion: $${stats.averagePerTransaction.toFixed(4)}`;
-
-    vscode.window.showInformationMessage(message, { modal: true });
-
-  } catch (error) {
-    vscode.window.showErrorMessage(`Fehler beim Laden der Kosten: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-async function handleTestConnectionCommand(): Promise<void> {
-  const providerIds = Array.from(state.providers.keys());
   
-  if (providerIds.length === 0) {
-    vscode.window.showWarningMessage("Keine Provider konfiguriert");
-    return;
-  }
+  vscode.window.showInformationMessage('Guido Model Router Extension deaktiviert.');
+}
 
-  const selected = await vscode.window.showQuickPick(
-    [...providerIds, "Alle testen"],
-    { placeHolder: "Provider zum Testen auswählen" }
-  );
-
-  if (!selected) return;
-
-  const providersToTest = selected === "Alle testen" 
-    ? Array.from(state.providers.entries())
-    : [[selected, state.providers.get(selected)!] as [string, Provider]].filter(([_, provider]) => provider);
-
-  state.outputChannel.clear();
-  state.outputChannel.appendLine("🔍 Teste Provider-Verbindungen...");
-  state.outputChannel.show();
-
-  for (const [id, provider] of providersToTest) {
-    if (!provider) continue;
-    
+async function initializeExtension() {
+  // Load configuration
+  const config = await loadConfiguration();
+  
+  // Initialize secret manager
+  const secretManager = new VSCodeSecretManager(extensionContext);
+  
+  // Initialize providers
+  const providers = new Map();
+  for (const providerConfig of config.providers) {
     try {
-      state.outputChannel.appendLine(`\nTeste ${id}...`);
-      const available = await provider.isAvailable();
-      
-      if (available) {
-        state.outputChannel.appendLine(`✅ ${id}: Verbindung erfolgreich`);
+      let provider;
+      if (providerConfig.kind === 'openai-compat') {
+        provider = new OpenAICompatProvider(providerConfig as any);
+      } else if (providerConfig.kind === 'ollama') {
+        provider = new OllamaProvider(providerConfig as any);
       } else {
-        state.outputChannel.appendLine(`❌ ${id}: Nicht verfügbar`);
-      }
-
-      // Test with OpenAI provider if it has test method
-      if ("testConnection" in provider && typeof provider.testConnection === "function") {
-        const testResult = await provider.testConnection();
-        if (testResult.success) {
-          state.outputChannel.appendLine(`✅ ${id}: API-Test erfolgreich`);
-        } else {
-          state.outputChannel.appendLine(`❌ ${id}: API-Test fehlgeschlagen: ${testResult.error}`);
-        }
-      }
-
-    } catch (error) {
-      state.outputChannel.appendLine(`❌ ${id}: Fehler: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-  
-  state.outputChannel.appendLine("\n🏁 Verbindungstest abgeschlossen");
-}
-
-async function handleClassifyPromptCommand(): Promise<void> {
-  if (!state.classifier) {
-    vscode.window.showErrorMessage("Prompt-Classifier nicht aktiviert");
-    return;
-  }
-
-  const prompt = await vscode.window.showInputBox({
-    prompt: "Prompt zur Klassifikation eingeben",
-    placeHolder: "z.B. Schreibe Unit Tests für diese Funktion",
-  });
-
-  if (!prompt) return;
-
-  try {
-    const result = await state.classifier.classify(prompt);
-    
-    const message = `🔍 Prompt-Klassifikation:\n` +
-                   `Kategorie: ${result.class}\n` +
-                   `Konfidenz: ${(result.confidence * 100).toFixed(1)}%\n` +
-                   `Komplexität: ${result.characteristics.complexity}\n` +
-                   `Kreativität: ${result.characteristics.creativity}\n` +
-                   `Technisch: ${result.characteristics.technical}\n` +
-                   `Empfohlene Fähigkeiten: ${result.suggestedCapabilities.join(", ")}`;
-
-    vscode.window.showInformationMessage(message, { modal: true });
-
-  } catch (error) {
-    vscode.window.showErrorMessage(`Klassifikation fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-async function handleSimulateRoutingCommand(): Promise<void> {
-  if (!state.router) {
-    vscode.window.showErrorMessage("Router nicht initialisiert");
-    return;
-  }
-
-  const prompt = await vscode.window.showInputBox({
-    prompt: "Prompt für Routing-Simulation eingeben",
-    placeHolder: "z.B. Optimiere diese SQL-Abfrage für bessere Performance",
-  });
-
-  if (!prompt) return;
-
-  try {
-    const simulation = await state.router.simulateRoute({ prompt, mode: state.currentMode });
-    
-    state.outputChannel.clear();
-    state.outputChannel.appendLine("🎯 Routing-Simulation");
-    state.outputChannel.appendLine("=".repeat(50));
-    
-    if (simulation.result) {
-      const result = simulation.result;
-      state.outputChannel.appendLine(`\n✅ Gewähltes Modell: ${result.providerId}:${result.modelName}`);
-      state.outputChannel.appendLine(`📊 Score: ${result.score}`);
-      state.outputChannel.appendLine(`🧠 Begründung: ${result.reasoning.join(", ")}`);
-    }
-
-    state.outputChannel.appendLine("\n🎯 Alternativen:");
-    simulation.alternatives.slice(0, 5).forEach((alt, i) => {
-      const status = alt.available ? "✅" : "❌";
-      state.outputChannel.appendLine(`${i + 1}. ${status} ${alt.providerId}:${alt.modelName} (Score: ${alt.score})`);
-    });
-
-    state.outputChannel.show();
-
-  } catch (error) {
-    vscode.window.showErrorMessage(`Simulation fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-async function handleImportApiKeysCommand(): Promise<void> {
-  try {
-    const secretHelper = getSecretHelper();
-    const result = await secretHelper.importFromEnvironment();
-    
-    const message = `API-Key Import:\n` +
-                   `✅ Importiert: ${result.imported.join(", ") || "keine"}\n` +
-                   `⏭️ Übersprungen: ${result.skipped.join(", ") || "keine"}`;
-
-    vscode.window.showInformationMessage(message);
-
-    if (result.imported.length > 0) {
-      await loadConfiguration();
-    }
-
-  } catch (error) {
-    vscode.window.showErrorMessage(`Import fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-async function handleExportConfigCommand(): Promise<void> {
-  try {
-    const secretHelper = getSecretHelper();
-    const config = await secretHelper.exportConfiguration();
-    
-    const content = JSON.stringify(config, null, 2);
-    const doc = await vscode.workspace.openTextDocument({
-      content,
-      language: "json",
-    });
-    
-    await vscode.window.showTextDocument(doc);
-
-  } catch (error) {
-    vscode.window.showErrorMessage(`Export fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-// Voice Control Functions
-
-async function initializeVoiceControl(voiceConfig: VoiceConfig): Promise<void> {
-  try {
-    if (state.voiceController) {
-      await state.voiceController.destroy();
-    }
-
-    if (!state.router) {
-      throw new Error("Router muss initialisiert sein bevor Voice Control gestartet werden kann");
-    }
-
-    state.voiceController = new VoiceController(extensionContext, voiceConfig, state.router);
-    await state.voiceController.initialize();
-
-    state.outputChannel.appendLine("✅ Voice Control initialisiert");
-
-  } catch (error) {
-    state.outputChannel.appendLine(`❌ Voice Control Fehler: ${error instanceof Error ? error.message : String(error)}`);
-    vscode.window.showErrorMessage(`Voice Control konnte nicht initialisiert werden: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-async function handleStartVoiceControlCommand(): Promise<void> {
-  if (!state.voiceController) {
-    try {
-      await loadConfiguration();
-    } catch (error) {
-      vscode.window.showErrorMessage("Konfiguration konnte nicht geladen werden");
-      return;
-    }
-  }
-
-  if (state.voiceController) {
-    try {
-      await state.voiceController.startListening();
-      vscode.window.showInformationMessage("🎤 Guido Voice Control gestartet! Sagen Sie 'Guido' um zu beginnen.");
-    } catch (error) {
-      vscode.window.showErrorMessage(`Voice Control konnte nicht gestartet werden: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  } else {
-    vscode.window.showErrorMessage("Voice Control ist nicht konfiguriert. Bitte aktivieren Sie es in der router.config.yaml");
-  }
-}
-
-async function handleStopVoiceControlCommand(): Promise<void> {
-  if (state.voiceController) {
-    try {
-      await state.voiceController.stopListening();
-      vscode.window.showInformationMessage("🛑 Voice Control gestoppt");
-    } catch (error) {
-      vscode.window.showErrorMessage(`Fehler beim Stoppen: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  } else {
-    vscode.window.showInformationMessage("Voice Control ist nicht aktiv");
-  }
-}
-
-async function handleToggleVoiceControlCommand(): Promise<void> {
-  if (!state.voiceController) {
-    await handleStartVoiceControlCommand();
-  } else {
-    const currentState = state.voiceController.getState();
-    if (currentState === "listening" || currentState === "recording") {
-      await handleStopVoiceControlCommand();
-    } else {
-      await handleStartVoiceControlCommand();
-    }
-  }
-}
-
-async function handleVoiceSettingsCommand(): Promise<void> {
-  if (!state.voiceController) {
-    vscode.window.showErrorMessage("Voice Control ist nicht initialisiert");
-    return;
-  }
-
-  const options = [
-    "🎤 Voice Control starten/stoppen",
-    "🔊 Lautstärke anpassen",
-    "🗣️ Stimme wechseln", 
-    "🌐 Sprache ändern",
-    "⚙️ Erweiterte Einstellungen",
-    "📊 Voice Statistiken anzeigen"
-  ];
-
-  const selected = await vscode.window.showQuickPick(options, {
-    placeHolder: "Voice Control Einstellungen"
-  });
-
-  switch (selected) {
-    case "🎤 Voice Control starten/stoppen":
-      await handleToggleVoiceControlCommand();
-      break;
-
-    case "🔊 Lautstärke anpassen":
-      const volume = await vscode.window.showInputBox({
-        prompt: "Lautstärke eingeben (0.0 - 1.0)",
-        value: "0.8",
-        validateInput: (value) => {
-          const num = parseFloat(value);
-          return (isNaN(num) || num < 0 || num > 1) ? "Bitte eine Zahl zwischen 0.0 und 1.0 eingeben" : undefined;
-        }
-      });
-      if (volume) {
-        vscode.window.showInformationMessage(`Lautstärke auf ${volume} gesetzt`);
-      }
-      break;
-
-    case "🗣️ Stimme wechseln":
-      vscode.window.showInformationMessage("Stimmenwechsel über die Webview verfügbar");
-      break;
-
-    case "🌐 Sprache ändern":
-      const languages = ["de-DE", "en-US", "fr-FR", "es-ES", "it-IT"];
-      const selectedLang = await vscode.window.showQuickPick(languages, {
-        placeHolder: "Sprache auswählen"
-      });
-      if (selectedLang) {
-        vscode.window.showInformationMessage(`Sprache auf ${selectedLang} gesetzt`);
-      }
-      break;
-
-    case "⚙️ Erweiterte Einstellungen":
-      await handleOpenConfigCommand();
-      break;
-
-    case "📊 Voice Statistiken anzeigen":
-      const stats = state.voiceController.getStats();
-      const statsMessage = `📊 Voice Control Statistiken:
-        
-Sessions: ${stats.totalSessions}
-Gesamtzeit: ${Math.round(stats.totalDuration / 1000 / 60)} Minuten
-Durchschnitt/Session: ${Math.round(stats.averageSessionDuration / 1000)} Sekunden
-Befehle ausgeführt: ${stats.commandsExecuted}
-Fehler: ${stats.errorsCount}
-Erkennungsgenauigkeit: ${stats.recognitionAccuracy ? `${Math.round(stats.recognitionAccuracy * 100)}%` : 'N/A'}`;
-
-      vscode.window.showInformationMessage(statsMessage, { modal: true });
-      break;
-  }
-}
-
-async function handleVoicePermissionsCommand(): Promise<void> {
-  const options = [
-    "🔐 DSGVO-Einverständnis verwalten",
-    "🎤 Mikrofon-Berechtigungen prüfen",
-    "📊 Datennutzung anzeigen", 
-    "🗑️ Gespeicherte Daten löschen",
-    "📄 Datenschutzerklärung anzeigen",
-    "📤 Daten exportieren (DSGVO)"
-  ];
-
-  const selected = await vscode.window.showQuickPick(options, {
-    placeHolder: "Berechtigungen und Datenschutz"
-  });
-
-  switch (selected) {
-    case "🔐 DSGVO-Einverständnis verwalten":
-      const revokeConsent = await vscode.window.showWarningMessage(
-        "Möchten Sie Ihr Einverständnis zur Datenverarbeitung widerrufen? Dies löscht alle gespeicherten Voice-Daten.",
-        { modal: true },
-        "Widerrufen",
-        "Beibehalten"
-      );
-
-      if (revokeConsent === "Widerrufen") {
-        vscode.window.showInformationMessage("✅ Einverständnis widerrufen und Daten gelöscht");
-      }
-      break;
-
-    case "🎤 Mikrofon-Berechtigungen prüfen":
-      vscode.window.showInformationMessage("Mikrofon-Berechtigungen werden geprüft... Details in der Webview verfügbar.");
-      break;
-
-    case "📊 Datennutzung anzeigen":
-      const dataInfo = `📊 Voice Control Datennutzung:
-
-🎙️ Sprachaufnahmen: Nicht gespeichert
-📝 Transkripte: Anonymisiert, 30 Tage Aufbewahrung
-📈 Statistiken: Lokal gespeichert
-🔒 Verschlüsselung: Aktiviert
-🌍 Externe APIs: Nur bei aktiviertem Cloud-Modus
-
-Letzte Aktualisierung: ${new Date().toLocaleString('de-DE')}`;
-
-      vscode.window.showInformationMessage(dataInfo, { modal: true });
-      break;
-
-    case "🗑️ Gespeicherte Daten löschen":
-      const deleteData = await vscode.window.showWarningMessage(
-        "Alle Voice Control Daten löschen? Dies kann nicht rückgängig gemacht werden.",
-        { modal: true },
-        "Löschen",
-        "Abbrechen"
-      );
-
-      if (deleteData === "Löschen") {
-        vscode.window.showInformationMessage("✅ Alle Voice Control Daten gelöscht");
-      }
-      break;
-
-    case "📄 Datenschutzerklärung anzeigen":
-      const policyUri = vscode.Uri.parse("https://github.com/your-username/model-router/blob/main/PRIVACY.md");
-      await vscode.env.openExternal(policyUri);
-      break;
-
-    case "📤 Daten exportieren (DSGVO)":
-      const exportData = JSON.stringify({
-        exported: new Date().toISOString(),
-        voiceStats: state.voiceController?.getStats() || {},
-        permissions: "granted", 
-        note: "Voice Control Datenexport gemäß DSGVO Artikel 20"
-      }, null, 2);
-
-      const doc = await vscode.workspace.openTextDocument({
-        content: exportData,
-        language: 'json'
-      });
-
-      await vscode.window.showTextDocument(doc);
-      vscode.window.showInformationMessage("📤 Voice Control Daten exportiert");
-      break;
-  }
-}
-
-// ---- Hilfsfunktionen für Chat Attachments ----
-interface AttachmentSummary { name: string; snippet: string; }
-async function readAttachmentSummaries(paths: string[]): Promise<AttachmentSummary[]> {
-  const cfg = vscode.workspace.getConfiguration('modelRouter');
-  const maxFiles = Math.max(1, cfg.get<number>('chat.attachment.maxFiles', 5));
-  const maxBytesPerFile = Math.max(512, cfg.get<number>('chat.attachment.maxSnippetBytes', 8192));
-  const redactSecrets = cfg.get<boolean>('chat.attachment.redactSecrets', true);
-  const extraPatterns = cfg.get<string[]>('chat.attachment.additionalRedactPatterns', []) || [];
-  const secretPatterns: RegExp[] = [];
-  if (redactSecrets) {
-    const base = [
-      /(sk|rk|pk|ak|ey|token)[-_]?[A-Za-z0-9]{12,}/gi, // generische Keys
-      /api[_-]?key\s*[:=]\s*['"]?[A-Za-z0-9-_]{10,}['"]?/gi,
-      /secret[_-]?key\s*[:=]\s*['"]?[A-Za-z0-9-_]{10,}['"]?/gi,
-      /-----BEGIN [A-Z ]+ PRIVATE KEY-----[\s\S]+?-----END [A-Z ]+ PRIVATE KEY-----/g
-    ];
-    secretPatterns.push(...base);
-    for (const p of extraPatterns) {
-      try { secretPatterns.push(new RegExp(p, 'gi')); } catch {/* ignore invalid */}
-    }
-  }
-  const results: AttachmentSummary[] = [];
-  for (const p of paths.slice(0, maxFiles)) {
-    try {
-      const stat = fs.statSync(p);
-      if (stat.isDirectory()) continue;
-      if (stat.size > 512 * 1024) { // >512KB überspringen
-        results.push({ name: path.basename(p), snippet: '[Übersprungen: Datei zu groß]' });
+        console.warn(`Unknown provider kind: ${providerConfig.kind}`);
         continue;
       }
-      const buf = fs.readFileSync(p);
-      const slice = buf.slice(0, maxBytesPerFile).toString('utf8');
-      let cleaned = slice.replace(/\0/g, '').replace(/\s+$/,'');
-      if (redactSecrets && secretPatterns.length) {
-        for (const rx of secretPatterns) {
-          cleaned = cleaned.replace(rx, '[REDACTED]');
-        }
-      }
-      results.push({ name: path.basename(p), snippet: cleaned });
-    } catch {
-      // ignore
+      providers.set(providerConfig.id, provider);
+    } catch (error) {
+      console.warn(`Failed to initialize provider ${providerConfig.id}:`, error);
     }
   }
-  return results;
+  
+  // Initialize router
+  const router = new ModelRouter(config, providers);
+  
+  state = {
+    router,
+    providers,
+    config,
+    secretManager
+  };
 }
 
-// ---- Editor Integration Command Handlers ----
-
-async function handleExplainCodeCommand(): Promise<void> {
-  const editor = vscode.window.activeTextEditor;
-  if (!editor) {
-    vscode.window.showWarningMessage("Kein aktiver Editor gefunden");
+async function initializeVoiceControl() {
+  if (!state.config.voice) {
     return;
   }
-
-  const selection = editor.selection;
-  if (selection.isEmpty) {
-    vscode.window.showWarningMessage("Bitte markieren Sie Code zum Erklären");
-    return;
-  }
-
-  const selectedText = editor.document.getText(selection);
-  const language = editor.document.languageId;
-  const fileName = editor.document.fileName;
-
-  const prompt = `Erkläre folgenden ${language}-Code aus der Datei ${fileName}:
-
-\`\`\`${language}
-${selectedText}
-\`\`\`
-
-Bitte erkläre:
-1. Was macht dieser Code?
-2. Wie funktioniert er?
-3. Gibt es Besonderheiten oder potentielle Probleme?
-4. Sind Verbesserungen möglich?`;
-
-  // Öffne Chat UI und sende Prompt
-  await vscode.commands.executeCommand('modelRouter.openChatUI');
-  await vscode.commands.executeCommand('modelRouter.chat.sendFromWebview', prompt);
-}
-
-async function handleGenerateTestsCommand(): Promise<void> {
-  const editor = vscode.window.activeTextEditor;
-  if (!editor) {
-    vscode.window.showWarningMessage("Kein aktiver Editor gefunden");
-    return;
-  }
-
-  const selection = editor.selection;
-  if (selection.isEmpty) {
-    vscode.window.showWarningMessage("Bitte markieren Sie Code für Test-Generierung");
-    return;
-  }
-
-  const selectedText = editor.document.getText(selection);
-  const language = editor.document.languageId;
-  const fileName = editor.document.fileName;
-
-  const prompt = `Generiere Unit Tests für folgenden ${language}-Code aus ${fileName}:
-
-\`\`\`${language}
-${selectedText}
-\`\`\`
-
-Bitte erstelle:
-1. Umfassende Unit Tests
-2. Edge Cases und Fehlerfälle
-3. Mock-Objekte falls nötig
-4. Beschreibende Test-Namen
-5. Kommentare zur Test-Logik
-
-Verwende das passende Test-Framework für ${language}.`;
-
-  await vscode.commands.executeCommand('modelRouter.openChatUI');
-  await vscode.commands.executeCommand('modelRouter.chat.sendFromWebview', prompt);
-}
-
-async function handleRefactorCodeCommand(): Promise<void> {
-  const editor = vscode.window.activeTextEditor;
-  if (!editor) {
-    vscode.window.showWarningMessage("Kein aktiver Editor gefunden");
-    return;
-  }
-
-  const selection = editor.selection;
-  if (selection.isEmpty) {
-    vscode.window.showWarningMessage("Bitte markieren Sie Code zum Refactoring");
-    return;
-  }
-
-  const selectedText = editor.document.getText(selection);
-  const language = editor.document.languageId;
-
-  const prompt = `Refactore folgenden ${language}-Code:
-
-\`\`\`${language}
-${selectedText}
-\`\`\`
-
-Bitte verbessere:
-1. Lesbarkeit und Struktur
-2. Performance wo möglich
-3. Entferne Code-Duplikation
-4. Befolge Best Practices für ${language}
-5. Behalte die ursprüngliche Funktionalität bei
-
-Erkläre die Änderungen kurz.`;
-
-  await vscode.commands.executeCommand('modelRouter.openChatUI');
-  await vscode.commands.executeCommand('modelRouter.chat.sendFromWebview', prompt);
-}
-
-async function handleFindBugsCommand(): Promise<void> {
-  const editor = vscode.window.activeTextEditor;
-  if (!editor) {
-    vscode.window.showWarningMessage("Kein aktiver Editor gefunden");
-    return;
-  }
-
-  const selection = editor.selection;
-  if (selection.isEmpty) {
-    vscode.window.showWarningMessage("Bitte markieren Sie Code für Bug-Analyse");
-    return;
-  }
-
-  const selectedText = editor.document.getText(selection);
-  const language = editor.document.languageId;
-
-  const prompt = `Analysiere folgenden ${language}-Code auf Bugs und Probleme:
-
-\`\`\`${language}
-${selectedText}
-\`\`\`
-
-Suche nach:
-1. Potentielle Null-Pointer/Undefined-Fehler
-2. Race Conditions oder Threading-Probleme
-3. Memory Leaks
-4. Security Vulnerabilities
-5. Logic Errors
-6. Performance-Probleme
-
-Gib konkrete Lösungsvorschläge für gefundene Probleme.`;
-
-  await vscode.commands.executeCommand('modelRouter.openChatUI');
-  await vscode.commands.executeCommand('modelRouter.chat.sendFromWebview', prompt);
-}
-
-async function handleAddCommentsCommand(): Promise<void> {
-  const editor = vscode.window.activeTextEditor;
-  if (!editor) {
-    vscode.window.showWarningMessage("Kein aktiver Editor gefunden");
-    return;
-  }
-
-  const selection = editor.selection;
-  if (selection.isEmpty) {
-    vscode.window.showWarningMessage("Bitte markieren Sie Code für Kommentierung");
-    return;
-  }
-
-  const selectedText = editor.document.getText(selection);
-  const language = editor.document.languageId;
-
-  const prompt = `Füge sinnvolle Kommentare zu folgendem ${language}-Code hinzu:
-
-\`\`\`${language}
-${selectedText}
-\`\`\`
-
-Bitte füge hinzu:
-1. Funktions-/Methoden-Dokumentation
-2. Inline-Kommentare für komplexe Logik
-3. Parameter- und Rückgabe-Beschreibungen
-4. Beispiele wo sinnvoll
-5. Verwende ${language}-spezifische Doc-Kommentar-Standards
-
-Gib den vollständigen Code mit Kommentaren zurück.`;
-
-  await vscode.commands.executeCommand('modelRouter.openChatUI');
-  await vscode.commands.executeCommand('modelRouter.chat.sendFromWebview', prompt);
-}
-
-/**
- * Phase 2: Session Management Command Handlers
- */
-
-async function handleNewSessionCommand(): Promise<void> {
+  
   try {
-    const sessionName = await vscode.window.showInputBox({
-      prompt: "Name für neue Chat-Session",
-      placeHolder: "z.B. 'Frontend Refactoring' oder leer für automatischen Namen"
-    });
-
-    if (sessionName !== undefined) {
-      // Send message to active chat targets to create new session
-      const targets = getActiveChatTargets();
-      targets.forEach(target => {
-        if (target.sendMessage) {
-          target.sendMessage({
-            type: 'session:create',
-            data: { name: sessionName }
-          });
-        }
-      });
-
-      vscode.window.showInformationMessage(
-        sessionName ? `Neue Session "${sessionName}" erstellt` : "Neue Session erstellt"
-      );
-    }
-  } catch (error) {
-    vscode.window.showErrorMessage(`Fehler beim Erstellen der Session: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-async function handleSwitchSessionCommand(): Promise<void> {
-  try {
-    // This would typically show a quick pick with existing sessions
-    // For now, we just show the split view which includes session management
-    await handleShowSplitViewCommand();
-  } catch (error) {
-    vscode.window.showErrorMessage(`Fehler beim Wechseln der Session: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-async function handleSearchHistoryCommand(): Promise<void> {
-  try {
-    const searchQuery = await vscode.window.showInputBox({
-      prompt: "Durchsuche Chat-Historie",
-      placeHolder: "Suchbegriff eingeben..."
-    });
-
-    if (searchQuery) {
-      // Send search request to active chat targets
-      const targets = getActiveChatTargets();
-      targets.forEach(target => {
-        if (target.sendMessage) {
-          target.sendMessage({
-            type: 'history:search',
-            data: { query: searchQuery }
-          });
-        }
-      });
-    }
-  } catch (error) {
-    vscode.window.showErrorMessage(`Fehler bei der Suche: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-async function handleShowSplitViewCommand(): Promise<void> {
-  try {
-    await vscode.commands.executeCommand('workbench.view.extension.modelRouterSplitView');
-  } catch (error) {
-    vscode.window.showErrorMessage(`Fehler beim Öffnen der Split View: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-/**
- * Phase 3: Advanced AI Capabilities Command Handlers
- */
-
-async function handleMultiModelChatCommand(): Promise<void> {
-  try {
-    if (!state.multiModelManager) {
-      vscode.window.showErrorMessage('Multi-Model Manager nicht verfügbar');
-      return;
-    }
-
-    const prompt = await vscode.window.showInputBox({
-      prompt: "Prompt für Multi-Model Vergleich",
-      placeHolder: "Geben Sie Ihren Prompt ein..."
-    });
-
-    if (!prompt) return;
-
-    const strategy = await vscode.window.showQuickPick([
-      { label: 'parallel', description: 'Alle Modelle gleichzeitig ausführen' },
-      { label: 'sequential', description: 'Modelle nacheinander mit Kontext' },
-      { label: 'consensus', description: 'Konsens aus mehreren Antworten bilden' },
-      { label: 'comparison', description: 'Vergleichende Analyse' }
-    ], {
-      placeHolder: 'Wählen Sie eine Strategie'
-    });
-
-    if (!strategy) return;
-
-    const models = ['gpt-4', 'claude-3-sonnet', 'claude-3-haiku'];
+    state.voiceController = new VoiceController(extensionContext, state.config.voice, state.router);
+    await state.voiceController.initialize();
     
-    const response = await state.multiModelManager.executeMultiModel({
+    vscode.window.showInformationMessage('Guido Voice Control initialisiert! 🎤');
+  } catch (error) {
+    console.warn('Voice control initialization failed:', error);
+    vscode.window.showWarningMessage('Voice Control konnte nicht initialisiert werden.');
+  }
+}
+
+async function initializeExperimentalFeatures() {
+  try {
+    // Initialize experimental voice features
+    state.experimentalFeatures = new ExperimentalVoiceFeatures();
+    
+    // Initialize experimental routing
+    state.experimentalRouting = new ExperimentalRouting(state.router, state.providers);
+    
+    // Initialize experimental NLP
+    state.experimentalNLP = new ExperimentalNLP();
+    
+    vscode.window.showInformationMessage('🧪 Experimentelle Features aktiviert!');
+  } catch (error) {
+    console.warn('Experimental features initialization failed:', error);
+    vscode.window.showWarningMessage('Experimentelle Features konnten nicht initialisiert werden.');
+  }
+}
+
+function registerCommands(context: vscode.ExtensionContext) {
+  // Core commands
+  context.subscriptions.push(
+    vscode.commands.registerCommand('modelRouter.chat', async () => {
+      await handleChatCommand();
+    }),
+    
+    vscode.commands.registerCommand('modelRouter.openConfig', async () => {
+      await handleOpenConfigCommand();
+    }),
+    
+    vscode.commands.registerCommand('modelRouter.estimateCost', async () => {
+      await handleEstimateCostCommand();
+    })
+  );
+  
+  // Voice control commands
+  context.subscriptions.push(
+    vscode.commands.registerCommand('modelRouter.startVoiceControl', async () => {
+      await handleStartVoiceControl();
+    }),
+    
+    vscode.commands.registerCommand('modelRouter.stopVoiceControl', async () => {
+      await handleStopVoiceControl();
+    }),
+    
+    vscode.commands.registerCommand('modelRouter.toggleVoiceControl', async () => {
+      await handleToggleVoiceControl();
+    }),
+    
+    vscode.commands.registerCommand('modelRouter.voiceSettings', async () => {
+      await handleVoiceSettings();
+    }),
+    
+    vscode.commands.registerCommand('modelRouter.voicePermissions', async () => {
+      await handleVoicePermissions();
+    })
+  );
+  
+  // Experimental commands
+  context.subscriptions.push(
+    vscode.commands.registerCommand('modelRouter.experimental.emotionAnalysis', async () => {
+      await handleExperimentalEmotionAnalysis();
+    }),
+    
+    vscode.commands.registerCommand('modelRouter.experimental.contextEnhancement', async () => {
+      await handleExperimentalContextEnhancement();
+    }),
+    
+    vscode.commands.registerCommand('modelRouter.experimental.adaptiveRouting', async () => {
+      await handleExperimentalAdaptiveRouting();
+    }),
+    
+    vscode.commands.registerCommand('modelRouter.experimental.intentRecognition', async () => {
+      await handleExperimentalIntentRecognition();
+    }),
+    
+    vscode.commands.registerCommand('modelRouter.experimental.personalityAdaptation', async () => {
+      await handleExperimentalPersonalityAdaptation();
+    }),
+    
+    vscode.commands.registerCommand('modelRouter.experimental.multilingualProcessing', async () => {
+      await handleExperimentalMultilingualProcessing();
+    }),
+    
+    vscode.commands.registerCommand('modelRouter.experimental.performanceMetrics', async () => {
+      await handleExperimentalPerformanceMetrics();
+    }),
+    
+    vscode.commands.registerCommand('modelRouter.experimental.showUI', async () => {
+      await handleExperimentalShowUI();
+    }),
+    
+    vscode.commands.registerCommand('modelRouter.experimental.testFeatures', async () => {
+      await handleExperimentalTestFeatures();
+    })
+  );
+}
+
+// Command handlers
+async function handleChatCommand() {
+  const prompt = await vscode.window.showInputBox({
+    prompt: 'Geben Sie Ihre Nachricht ein:',
+    placeHolder: 'z.B. "Erkläre mir TypeScript"'
+  });
+  
+  if (!prompt) return;
+  
+  try {
+    const routingContext = {
       prompt,
-      models,
-      strategy: strategy.label as any
-    });
-
-    // Display results in chat UI
-    await vscode.commands.executeCommand('modelRouter.openChatUI');
-    const targets = getActiveChatTargets();
+      lang: 'de',
+      mode: 'auto'
+    };
     
-    if (targets.length > 0) {
-      const resultMessage = `Multi-Model Ergebnis (${strategy.label}):\n\n` +
-        response.map(r => `**${r.modelId}:**\n${r.response}\n\n`).join('---\n');
-      
-      targets.forEach(target => {
-        target.addUserMessage(`Multi-Model: ${prompt}`);
-        target.streamDelta(resultMessage);
-        target.streamDone();
-      });
-    }
-
+    const result = await state.router.route(routingContext);
+    await displayChatResult(result);
   } catch (error) {
-    vscode.window.showErrorMessage(`Multi-Model Chat Fehler: ${error instanceof Error ? error.message : String(error)}`);
+    vscode.window.showErrorMessage(`Fehler: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
-async function handleCreateTaskPlanCommand(): Promise<void> {
+async function handleOpenConfigCommand() {
+  const configUri = vscode.Uri.file(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath + '/router.config.yaml');
+  await vscode.window.showTextDocument(configUri);
+}
+
+async function handleEstimateCostCommand() {
+  const prompt = await vscode.window.showInputBox({
+    prompt: 'Geben Sie den Text ein, für den Sie die Kosten schätzen möchten:'
+  });
+  
+  if (!prompt) return;
+  
   try {
-    if (!state.taskPlanner) {
-      vscode.window.showErrorMessage('Task Planner nicht verfügbar');
-      return;
-    }
+    const estimates = await Promise.all(
+      Array.from(state.providers.values()).map(async (provider) => {
+        const models = await provider.getAvailableModels();
+        return models.map((model: string) => ({
+          provider: provider.id(),
+          model,
+          estimatedCost: provider.estimateTokens(prompt) * 0.001 // Simplified cost estimation
+        }));
+      })
+    );
+    
+    const flatEstimates = estimates.flat();
+    const cheapest = flatEstimates.reduce((min, current) => 
+      current.estimatedCost < min.estimatedCost ? current : min
+    );
+    
+    vscode.window.showInformationMessage(
+      `Geschätzte Kosten: ${cheapest.estimatedCost.toFixed(4)}€ (${cheapest.provider}/${cheapest.model})`
+    );
+  } catch (error) {
+    vscode.window.showErrorMessage(`Fehler bei der Kostenberechnung: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
 
-    const objective = await vscode.window.showInputBox({
-      prompt: "Beschreiben Sie Ihr Ziel",
-      placeHolder: "z.B. 'Erstelle eine React-Komponente für...' oder 'Refaktoriere diese Klasse...'"
-    });
+async function handleStartVoiceControl() {
+  if (!state.voiceController) {
+    vscode.window.showErrorMessage('Voice Control ist nicht initialisiert.');
+    return;
+  }
+  
+  try {
+    await state.voiceController.startListening();
+    vscode.window.showInformationMessage('🎤 Guido hört zu... Sagen Sie "Guido"!');
+  } catch (error) {
+    vscode.window.showErrorMessage(`Fehler beim Starten der Sprachsteuerung: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
 
-    if (!objective) return;
+async function handleStopVoiceControl() {
+  if (!state.voiceController) {
+    return;
+  }
+  
+  try {
+    await state.voiceController.stopListening();
+    vscode.window.showInformationMessage('🔇 Sprachsteuerung gestoppt.');
+  } catch (error) {
+    vscode.window.showErrorMessage(`Fehler beim Stoppen der Sprachsteuerung: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
 
-    const projectType = await vscode.window.showQuickPick([
-      'web-frontend', 'web-backend', 'mobile-app', 'desktop-app', 'library', 'other'
-    ], {
-      placeHolder: 'Projekttyp auswählen'
-    });
+async function handleToggleVoiceControl() {
+  if (!state.voiceController) {
+    vscode.window.showErrorMessage('Voice Control ist nicht initialisiert.');
+    return;
+  }
+  
+  try {
+    // Simple toggle logic - if we can stop, we assume it's listening
+    await state.voiceController.stopListening();
+    await new Promise(resolve => setTimeout(resolve, 100));
+    await state.voiceController.startListening();
+    vscode.window.showInformationMessage('🔄 Sprachsteuerung umgeschaltet.');
+  } catch (error) {
+    vscode.window.showErrorMessage(`Fehler beim Umschalten der Sprachsteuerung: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
 
-    const qualityLevel = await vscode.window.showQuickPick([
-      { label: 'fast', description: 'Schnelle Ergebnisse' },
-      { label: 'balanced', description: 'Ausgewogene Qualität und Geschwindigkeit' },
-      { label: 'thorough', description: 'Höchste Qualität, mehr Zeit' }
-    ], {
-      placeHolder: 'Qualitätsstufe wählen'
-    });
+async function handleVoiceSettings() {
+  const options = [
+    'Sprache ändern',
+    'Stimme auswählen',
+    'Empfindlichkeit anpassen',
+    'Timeout-Einstellungen',
+    'Beep-Sound konfigurieren',
+    'TTS-Einstellungen',
+    'Experimentelle Features'
+  ];
+  
+  const selected = await vscode.window.showQuickPick(options, {
+    placeHolder: 'Wählen Sie eine Einstellung:'
+  });
+  
+  if (!selected) return;
+  
+  switch (selected) {
+    case 'Experimentelle Features':
+      await handleExperimentalShowUI();
+      break;
+    default:
+      vscode.window.showInformationMessage(`Einstellung "${selected}" wird implementiert...`);
+  }
+}
 
-    const plan = await state.taskPlanner.createPlan({
-      objective,
-      context: {
-        projectType,
-        language: 'typescript',
-        framework: 'vscode-extension'
-      },
+async function handleVoicePermissions() {
+  const options = [
+    'Mikrofon-Berechtigung prüfen',
+    'Datenschutz-Einstellungen',
+    'GDPR-Consent verwalten',
+    'Daten exportieren',
+    'Berechtigungen zurücksetzen',
+    'Statistiken anzeigen'
+  ];
+  
+  const selected = await vscode.window.showQuickPick(options, {
+    placeHolder: 'Wählen Sie eine Aktion:'
+  });
+  
+  if (!selected) return;
+  
+  switch (selected) {
+    case 'Statistiken anzeigen':
+      await showVoiceStatistics();
+      break;
+    default:
+      vscode.window.showInformationMessage(`Aktion "${selected}" wird implementiert...`);
+  }
+}
+
+async function showVoiceStatistics() {
+  if (!state.voiceController) {
+    vscode.window.showErrorMessage('Voice Controller nicht verfügbar.');
+    return;
+  }
+  
+  const message = `
+🎤 Voice Control Statistiken:
+
+📊 Aktivierungszeit: 0s
+🎯 Wake Word Erkennungen: 0
+💬 Verarbeitete Befehle: 0
+🎵 TTS Ausgaben: 0
+⚡ Durchschnittliche Reaktionszeit: 0ms
+🔧 Experimentelle Features: 0
+  `.trim();
+  
+  vscode.window.showInformationMessage(message);
+}
+
+// Experimental command handlers
+async function handleExperimentalEmotionAnalysis() {
+  if (!state.experimentalFeatures) {
+    vscode.window.showErrorMessage('Experimentelle Features nicht verfügbar.');
+    return;
+  }
+  
+  const testText = await vscode.window.showInputBox({
+    prompt: 'Geben Sie Text für Emotion-Analyse ein:',
+    placeHolder: 'z.B. "Ich bin frustriert mit diesem Code"'
+  });
+  
+  if (!testText) return;
+  
+  try {
+    const emotion = await state.experimentalFeatures.detectEmotion(testText);
+    vscode.window.showInformationMessage(
+      `🧠 Emotion: ${emotion.primary} (Confidence: ${(emotion.confidence * 100).toFixed(1)}%)`
+    );
+  } catch (error) {
+    vscode.window.showErrorMessage(`Emotion-Analyse fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function handleExperimentalContextEnhancement() {
+  if (!state.experimentalFeatures) {
+    vscode.window.showErrorMessage('Experimentelle Features nicht verfügbar.');
+    return;
+  }
+  
+  const testText = await vscode.window.showInputBox({
+    prompt: 'Geben Sie Text für Kontext-Erweiterung ein:',
+    placeHolder: 'z.B. "Erkläre mir diese Funktion"'
+  });
+  
+  if (!testText) return;
+  
+  try {
+    const context = {
+      project: vscode.workspace.name || 'unknown',
+      file: vscode.window.activeTextEditor?.document.fileName || 'unknown',
+      userExpertise: 'intermediate',
+      recentCommands: ['code_review', 'explanation']
+    };
+    
+    const enhanced = await state.experimentalFeatures.enhanceContext(testText, context);
+    vscode.window.showInformationMessage(
+      `🔍 Erweiterter Text: ${enhanced.transcript}`
+    );
+  } catch (error) {
+    vscode.window.showErrorMessage(`Kontext-Erweiterung fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function handleExperimentalAdaptiveRouting() {
+  if (!state.experimentalRouting) {
+    vscode.window.showErrorMessage('Experimentelles Routing nicht verfügbar.');
+    return;
+  }
+  
+  const prompt = await vscode.window.showInputBox({
+    prompt: 'Geben Sie einen Prompt für adaptives Routing ein:',
+    placeHolder: 'z.B. "Optimiere diesen Code für Performance"'
+  });
+  
+  if (!prompt) return;
+  
+  try {
+    const context = {
+      userExpertise: 'intermediate',
+      projectType: 'web_application',
+      urgency: 'normal'
+    };
+    
+    const decision = await state.experimentalRouting.contextAwareRouting(prompt, context);
+    vscode.window.showInformationMessage(
+      `🎯 Routing-Entscheidung: ${decision.model} (${decision.reasoning})`
+    );
+  } catch (error) {
+    vscode.window.showErrorMessage(`Adaptives Routing fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function handleExperimentalIntentRecognition() {
+  if (!state.experimentalNLP) {
+    vscode.window.showErrorMessage('Experimenteller NLP nicht verfügbar.');
+    return;
+  }
+  
+  const testText = await vscode.window.showInputBox({
+    prompt: 'Geben Sie Text für Intent-Erkennung ein:',
+    placeHolder: 'z.B. "Schreibe eine Funktion für Array-Sortierung"'
+  });
+  
+  if (!testText) return;
+  
+  try {
+    const intent = await state.experimentalNLP.detectIntent(testText);
+    vscode.window.showInformationMessage(
+      `🎯 Intent: ${intent.primary} (Confidence: ${(intent.confidence * 100).toFixed(1)}%)`
+    );
+  } catch (error) {
+    vscode.window.showErrorMessage(`Intent-Erkennung fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function handleExperimentalPersonalityAdaptation() {
+  if (!state.experimentalNLP) {
+    vscode.window.showErrorMessage('Experimenteller NLP nicht verfügbar.');
+    return;
+  }
+  
+  try {
+    const userPreferences = {
+      expertise: 'intermediate',
+      communicationStyle: 'casual',
       preferences: {
-        qualityLevel: qualityLevel?.label as any
+        formality: 0.3,
+        verbosity: 0.6,
+        humor: 0.4
       }
-    });
-
-    // Show plan in a new document
-    const doc = await vscode.workspace.openTextDocument({
-      content: `# Task Plan: ${plan.title}\n\n${plan.description}\n\n## Tasks:\n\n` +
-        plan.tasks.map((task, i) => 
-          `${i + 1}. **${task.title}** (${task.estimatedTime}min)\n   ${task.description}`
-        ).join('\n\n'),
-      language: 'markdown'
-    });
-
-    await vscode.window.showTextDocument(doc);
-
-    // Ask if user wants to execute
-    const execute = await vscode.window.showQuickPick(['Ja', 'Nein'], {
-      placeHolder: 'Plan ausführen?'
-    });
-
-    if (execute === 'Ja') {
-      await vscode.commands.executeCommand('modelRouter.executeTaskPlan', plan.id);
-    }
-
+    };
+    
+    const personality = await state.experimentalNLP.adaptPersonality(userPreferences);
+    vscode.window.showInformationMessage(
+      `🎭 Angepasste Persönlichkeit: ${personality.style} (Formalität: ${personality.formality})`
+    );
   } catch (error) {
-    vscode.window.showErrorMessage(`Task Plan Fehler: ${error instanceof Error ? error.message : String(error)}`);
+    vscode.window.showErrorMessage(`Persönlichkeitsanpassung fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
-async function handleExecuteTaskPlanCommand(planId?: string): Promise<void> {
+async function handleExperimentalMultilingualProcessing() {
+  if (!state.experimentalFeatures) {
+    vscode.window.showErrorMessage('Experimentelle Features nicht verfügbar.');
+    return;
+  }
+  
+  const testText = await vscode.window.showInputBox({
+    prompt: 'Geben Sie Text für mehrsprachige Verarbeitung ein:',
+    placeHolder: 'z.B. "Help me with this code" oder "Aide-moi avec ce code"'
+  });
+  
+  if (!testText) return;
+  
   try {
-    if (!state.taskPlanner) {
-      vscode.window.showErrorMessage('Task Planner nicht verfügbar');
-      return;
-    }
+    const result = await state.experimentalFeatures.processMultilingual(testText);
+    vscode.window.showInformationMessage(
+      `🌍 Sprache: ${result.detectedLanguage} → ${result.translated ? 'Übersetzt' : 'Keine Übersetzung nötig'}`
+    );
+  } catch (error) {
+    vscode.window.showErrorMessage(`Mehrsprachige Verarbeitung fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
 
-    let targetPlanId = planId;
-    if (!targetPlanId) {
-      const plans = state.taskPlanner.getActivePlans();
-      if (plans.length === 0) {
-        vscode.window.showErrorMessage('Keine aktiven Pläne verfügbar');
-        return;
+async function handleExperimentalPerformanceMetrics() {
+  if (!state.experimentalRouting) {
+    vscode.window.showErrorMessage('Experimentelles Routing nicht verfügbar.');
+    return;
+  }
+  
+  try {
+    const prompt = "Test prompt for performance metrics";
+    const decision = await state.experimentalRouting.performanceBasedSelection(prompt);
+    
+    const message = `
+📊 Performance-Metriken:
+
+🎯 Modell: ${decision.model}
+📈 Performance Score: ${(decision.performanceScore * 100).toFixed(1)}%
+💰 Geschätzte Kosten: ${decision.estimatedCost.toFixed(4)}€
+🎯 Confidence: ${(decision.confidence * 100).toFixed(1)}%
+  `.trim();
+    
+    vscode.window.showInformationMessage(message);
+  } catch (error) {
+    vscode.window.showErrorMessage(`Performance-Metriken fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function handleExperimentalShowUI() {
+  try {
+    const panel = vscode.window.createWebviewPanel(
+      'experimentalUI',
+      '🧪 Guido Experimentelle Features',
+      vscode.ViewColumn.One,
+      {
+        enableScripts: true,
+        retainContextWhenHidden: true
       }
-
-      const selectedPlan = await vscode.window.showQuickPick(
-        plans.map(p => ({ label: p.title, description: p.description, planId: p.id })),
-        { placeHolder: 'Plan zum Ausführen wählen' }
-      );
-
-      if (!selectedPlan) return;
-      targetPlanId = selectedPlan.planId;
-    }
-
-    await vscode.window.withProgress({
-      location: vscode.ProgressLocation.Notification,
-      title: "Task Plan wird ausgeführt...",
-      cancellable: true
-    }, async (progress, token) => {
-      const result = await state.taskPlanner!.executePlan(targetPlanId!, (task, progressValue) => {
-        progress.report({ 
-          increment: progressValue, 
-          message: `Ausführung: ${task.title}` 
-        });
-      });
-
-      // Show results
-      const resultContent = `# Task Plan Ergebnis\n\n` +
-        `Status: ${result.status}\n\n` +
-        `## Ergebnisse:\n\n` +
-        result.tasks.map(task => 
-          `### ${task.title} (${task.status})\n` +
-          (task.result?.output || 'Kein Ergebnis')
-        ).join('\n\n');
-
-      const doc = await vscode.workspace.openTextDocument({
-        content: resultContent,
-        language: 'markdown'
-      });
-
-      await vscode.window.showTextDocument(doc);
-    });
-
+    );
+    
+    state.experimentalUI = new ExperimentalUI(panel);
+    
+    // Set webview content
+    panel.webview.html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Guido Experimentelle Features</title>
+          <style>
+            ${state.experimentalUI.generateExperimentalCSS()}
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              background: var(--vscode-editor-background);
+              color: var(--vscode-editor-foreground);
+              padding: 20px;
+              margin: 0;
+            }
+          </style>
+        </head>
+        <body>
+          ${state.experimentalUI.generateExperimentalHTML()}
+          <script>
+            ${state.experimentalUI.generateExperimentalJS()}
+          </script>
+        </body>
+      </html>
+    `;
+    
+    vscode.window.showInformationMessage('🧪 Experimentelle UI geöffnet!');
   } catch (error) {
-    vscode.window.showErrorMessage(`Task Plan Ausführung Fehler: ${error instanceof Error ? error.message : String(error)}`);
+    vscode.window.showErrorMessage(`Experimentelle UI fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
-async function handleOptimizePromptCommand(): Promise<void> {
+async function handleExperimentalTestFeatures() {
   try {
-    if (!state.promptingManager) {
-      vscode.window.showErrorMessage('Prompting Manager nicht verfügbar');
-      return;
+    // Test all experimental features
+    const tests = [
+      { name: 'Emotion Detection', handler: handleExperimentalEmotionAnalysis },
+      { name: 'Context Enhancement', handler: handleExperimentalContextEnhancement },
+      { name: 'Adaptive Routing', handler: handleExperimentalAdaptiveRouting },
+      { name: 'Intent Recognition', handler: handleExperimentalIntentRecognition },
+      { name: 'Personality Adaptation', handler: handleExperimentalPersonalityAdaptation },
+      { name: 'Multilingual Processing', handler: handleExperimentalMultilingualProcessing },
+      { name: 'Performance Metrics', handler: handleExperimentalPerformanceMetrics }
+    ];
+    
+    vscode.window.showInformationMessage('🧪 Starte experimentelle Feature-Tests...');
+    
+    for (const test of tests) {
+      try {
+        await test.handler();
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait between tests
+      } catch (error) {
+        console.warn(`Test ${test.name} failed:`, error);
+      }
     }
-
-    const originalPrompt = await vscode.window.showInputBox({
-      prompt: "Prompt zum Optimieren",
-      placeHolder: "Geben Sie Ihren ursprünglichen Prompt ein..."
-    });
-
-    if (!originalPrompt) return;
-
-    const objective = await vscode.window.showInputBox({
-      prompt: "Was möchten Sie mit diesem Prompt erreichen?",
-      placeHolder: "Beschreiben Sie das gewünschte Ergebnis..."
-    });
-
-    if (!objective) return;
-
-    const optimized = await state.promptingManager.optimizePrompt({
-      original_prompt: originalPrompt,
-      objective
-    });
-
-    // Show optimization results
-    const resultContent = `# Prompt Optimierung\n\n` +
-      `## Original:\n${originalPrompt}\n\n` +
-      `## Optimiert:\n${optimized.optimized_prompt}\n\n` +
-      `## Verbesserungen:\n${optimized.improvements.map(i => `- ${i}`).join('\n')}\n\n` +
-      `## Strategie: ${optimized.strategy_used}\n` +
-      `## Konfidenz: ${(optimized.confidence * 100).toFixed(1)}%\n` +
-      `## Erwartete Qualitätssteigerung: ${(optimized.expected_quality_gain * 100).toFixed(1)}%\n\n` +
-      `## Begründung:\n${optimized.reasoning}`;
-
-    const doc = await vscode.workspace.openTextDocument({
-      content: resultContent,
-      language: 'markdown'
-    });
-
-    await vscode.window.showTextDocument(doc);
-
+    
+    vscode.window.showInformationMessage('✅ Experimentelle Feature-Tests abgeschlossen!');
   } catch (error) {
-    vscode.window.showErrorMessage(`Prompt Optimierung Fehler: ${error instanceof Error ? error.message : String(error)}`);
+    vscode.window.showErrorMessage(`Feature-Tests fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
-async function handleAnalyzeCodeCommand(): Promise<void> {
-  try {
-    if (!state.codeAnalyzer) {
-      vscode.window.showErrorMessage('Code Analyzer nicht verfügbar');
-      return;
+async function displayChatResult(result: any) {
+  const panel = vscode.window.createWebviewPanel(
+    'chatResult',
+    'Guido Chat Result',
+    vscode.ViewColumn.One,
+    {
+      enableScripts: true
     }
-
-    const activeEditor = vscode.window.activeTextEditor;
-    if (!activeEditor) {
-      vscode.window.showErrorMessage('Keine aktive Datei geöffnet');
-      return;
-    }
-
-    const focus = await vscode.window.showQuickPick([
-      { label: 'quality', description: 'Code-Qualität und Wartbarkeit' },
-      { label: 'security', description: 'Sicherheitslücken und Vulnerabilities' },
-      { label: 'performance', description: 'Performance-Optimierungen' },
-      { label: 'architecture', description: 'Architektur und Design-Patterns' },
-      { label: 'documentation', description: 'Dokumentation und Kommentare' },
-      { label: 'testing', description: 'Test-Abdeckung und Qualität' }
-    ], {
-      placeHolder: 'Analysefokus wählen'
-    });
-
-    if (!focus) return;
-
-    const depth = await vscode.window.showQuickPick([
-      { label: 'shallow', description: 'Oberflächliche Analyse' },
-      { label: 'medium', description: 'Mittlere Tiefe' },
-      { label: 'deep', description: 'Tiefgehende Analyse' }
-    ], {
-      placeHolder: 'Analysetiefe wählen'
-    });
-
-    if (!depth) return;
-
-    await vscode.window.withProgress({
-      location: vscode.ProgressLocation.Notification,
-      title: "Code wird analysiert...",
-      cancellable: false
-    }, async () => {
-      const result = await state.codeAnalyzer!.analyzeCode({
-        type: 'single_file',
-        target: activeEditor.document.fileName,
-        focus: focus.label as any,
-        depth: depth.label as any,
-        includeContext: true
-      });
-
-      // Show analysis results
-      const resultContent = `# Code-Analyse Ergebnis\n\n` +
-        `Datei: ${activeEditor.document.fileName}\n` +
-        `Fokus: ${focus.description}\n` +
-        `Tiefe: ${depth.description}\n` +
-        `Konfidenz: ${(result.confidence * 100).toFixed(1)}%\n\n` +
-        `## Zusammenfassung\n${result.summary}\n\n` +
-        `## Befunde (${result.findings.length})\n\n` +
-        result.findings.map(f => 
-          `### ${f.message} (${f.severity})\n` +
-          `**Kategorie:** ${f.category}\n` +
-          `**Zeile:** ${f.location.line}\n` +
-          `**Beschreibung:** ${f.description}\n`
-        ).join('\n') +
-        `\n## Empfehlungen (${result.recommendations.length})\n\n` +
-        result.recommendations.map(r =>
-          `### ${r.title} (${r.priority})\n` +
-          `**Typ:** ${r.type}\n` +
-          `**Aufwand:** ${r.estimated_effort}\n` +
-          `**Beschreibung:** ${r.description}\n` +
-          `**Implementierung:** ${r.implementation}\n` +
-          `**Vorteile:** ${r.benefits.join(', ')}\n`
-        ).join('\n') +
-        `\n## Metriken\n` +
-        `- Zeilen: ${result.metrics.lines_of_code}\n` +
-        `- Zyklomatische Komplexität: ${result.metrics.cyclomatic_complexity}\n` +
-        `- Wartbarkeitsindex: ${result.metrics.maintainability_index.toFixed(1)}\n` +
-        `- Technische Schuld: ${result.metrics.technical_debt.toFixed(1)}\n`;
-
-      const doc = await vscode.workspace.openTextDocument({
-        content: resultContent,
-        language: 'markdown'
-      });
-
-      await vscode.window.showTextDocument(doc);
-    });
-
-  } catch (error) {
-    vscode.window.showErrorMessage(`Code-Analyse Fehler: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-async function handleReviewPullRequestCommand(): Promise<void> {
-  try {
-    vscode.window.showInformationMessage('Pull Request Review Feature wird in einer zukünftigen Version implementiert');
-  } catch (error) {
-    vscode.window.showErrorMessage(`PR Review Fehler: ${error instanceof Error ? error.message : String(error)}`);
-  }
+  );
+  
+  panel.webview.html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Chat Result</title>
+        <style>
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--vscode-editor-background);
+            color: var(--vscode-editor-foreground);
+            padding: 20px;
+            margin: 0;
+          }
+          .result {
+            background: var(--vscode-editor-inactiveSelectionBackground);
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            white-space: pre-wrap;
+          }
+        </style>
+      </head>
+      <body>
+        <h2>Guido Antwort:</h2>
+        <div class="result">${result.content || 'Keine Antwort erhalten'}</div>
+        <p><strong>Modell:</strong> ${result.model || 'Unbekannt'}</p>
+        <p><strong>Provider:</strong> ${result.provider || 'Unbekannt'}</p>
+      </body>
+    </html>
+  `;
 }

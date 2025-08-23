@@ -114,4 +114,8 @@ export declare class ConfigLoader {
      */
     createDefaultConfig(filePath: string): void;
 }
+/**
+ * Load configuration from the default location
+ */
+export declare function loadConfiguration(): Promise<ProfileConfig>;
 //# sourceMappingURL=config.d.ts.map
