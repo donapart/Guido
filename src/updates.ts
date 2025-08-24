@@ -1,102 +1,119 @@
-// src/updates.ts
-// Implementierung für automatische Updates und Versionsprüfung
-
-import * as vscode from 'vscode';
-import { logger } from './utils/logger';
-
-// Version aus package.json
-const CURRENT_VERSION = '0.2.2';
-
 /**
- * Prüft nach Updates für die Guido Model Router-Erweiterung
+ * Update checking functionality for Guido Model Router
  */
-export async function checkForUpdates(context: vscode.ExtensionContext): Promise<void> {
-    const config = vscode.workspace.getConfiguration('modelRouter');
-    const autoCheck = config.get<boolean>('updates.autoCheck', true);
-    
+
+import * as vscode from "vscode";
+import { logger } from "./utils/logger";
+
+interface UpdateInfo {
+  version: string;
+  downloadUrl: string;
+  releaseNotes: string;
+  isMandatory: boolean;
+}
+
+export async function checkForUpdates(
+  context: vscode.ExtensionContext
+): Promise<void> {
+  try {
+    const config = vscode.workspace.getConfiguration("modelRouter");
+    const autoCheck = config.get<boolean>("updates.autoCheck", true);
+    const notifyOnStart = config.get<boolean>("updates.notifyOnStart", true);
+
     if (!autoCheck) {
-        logger.info('Automatische Update-Prüfung deaktiviert');
-        return;
+      logger.info("Update checking disabled by user");
+      return;
     }
-    
-    try {
-        logger.info('Prüfe nach Updates...');
-        
-        // Hier würde normalerweise ein API-Aufruf erfolgen, um die neueste Version zu ermitteln
-        // Da wir keinen echten Server haben, simulieren wir das Verhalten
-        
-        // Simuliere Verzögerung für Netzwerkanfrage
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        
-        // Simuliere neuere Version (in echtem Code durch API-Antwort ersetzen)
-        const latestVersion = await getLatestVersion();
-        
-        if (isNewerVersion(latestVersion, CURRENT_VERSION)) {
-            logger.info(`Neue Version verfügbar: ${latestVersion}`);
-            const notifyOnStart = config.get<boolean>('updates.notifyOnStart', true);
-            
-            if (notifyOnStart) {
-                const message = `Eine neue Version von Guido Model Router (${latestVersion}) ist verfügbar. Sie verwenden derzeit Version ${CURRENT_VERSION}.`;
-                const updateNow = 'Jetzt aktualisieren';
-                const skipVersion = 'Diese Version überspringen';
-                const response = await vscode.window.showInformationMessage(message, updateNow, skipVersion);
-                
-                if (response === updateNow) {
-                    vscode.env.openExternal(vscode.Uri.parse('https://github.com/model-router/guido-model-router/releases/latest'));
-                } else if (response === skipVersion) {
-                    // Speichere in Kontext, dass diese Version übersprungen werden soll
-                    context.globalState.update('skipVersion', latestVersion);
-                }
-            }
-        } else {
-            logger.info('Sie verwenden bereits die neueste Version');
+
+    const currentVersion = context.extension.packageJSON.version;
+    logger.info("Checking for updates", { currentVersion });
+
+    // Simulate update check (in a real implementation, this would check against a server)
+    const lastCheck = context.globalState.get<number>("lastUpdateCheck", 0);
+    const now = Date.now();
+    const checkInterval = 24 * 60 * 60 * 1000; // 24 hours
+
+    if (now - lastCheck < checkInterval) {
+      logger.info("Update check skipped - too recent");
+      return;
+    }
+
+    // Store the check time
+    await context.globalState.update("lastUpdateCheck", now);
+
+    // For now, just log that we checked
+    logger.info("Update check completed", {
+      currentVersion,
+      lastCheck: new Date(lastCheck).toISOString(),
+      nextCheck: new Date(now + checkInterval).toISOString(),
+    });
+
+    // In a real implementation, you would:
+    // 1. Fetch latest version from your update server
+    // 2. Compare with current version
+    // 3. Show notification if update is available
+    // 4. Provide download link
+
+    if (notifyOnStart) {
+      vscode.window
+        .showInformationMessage(
+          `Guido Model Router v${currentVersion} ist bereit! 🚀`,
+          "Dokumentation öffnen",
+          "Einstellungen"
+        )
+        .then((selection) => {
+          if (selection === "Dokumentation öffnen") {
+            vscode.env.openExternal(
+              vscode.Uri.parse(
+                "https://github.com/model-router/guido-model-router"
+              )
+            );
+          } else if (selection === "Einstellungen") {
+            vscode.commands.executeCommand(
+              "workbench.action.openSettings",
+              "modelRouter"
+            );
+          }
+        });
+    }
+  } catch (error) {
+    logger.error("Update check failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    // Don't show error to user for update check failures
+  }
+}
+
+export async function forceUpdateCheck(
+  context: vscode.ExtensionContext
+): Promise<void> {
+  try {
+    const currentVersion = context.extension.packageJSON.version;
+
+    vscode.window
+      .showInformationMessage(
+        `Aktuelle Version: ${currentVersion}`,
+        "Manuell prüfen",
+        "Einstellungen"
+      )
+      .then((selection) => {
+        if (selection === "Manuell prüfen") {
+          vscode.env.openExternal(
+            vscode.Uri.parse(
+              "https://github.com/model-router/guido-model-router/releases"
+            )
+          );
+        } else if (selection === "Einstellungen") {
+          vscode.commands.executeCommand(
+            "workbench.action.openSettings",
+            "modelRouter"
+          );
         }
-    } catch (error) {
-        logger.error('Fehler bei der Update-Prüfung:', error);
-    }
-}
-
-/**
- * Prüft, ob eine neue Version verfügbar ist
- * @param latestVersion Die neueste verfügbare Version
- * @param currentVersion Die aktuelle Version
- * @returns true, wenn die neueste Version neuer ist als die aktuelle Version
- */
-function isNewerVersion(latestVersion: string, currentVersion: string): boolean {
-    const latest = latestVersion.split('.').map(Number);
-    const current = currentVersion.split('.').map(Number);
-    
-    for (let i = 0; i < Math.max(latest.length, current.length); i++) {
-        const l = latest[i] || 0;
-        const c = current[i] || 0;
-        
-        if (l > c) return true;
-        if (l < c) return false;
-    }
-    
-    return false;
-}
-
-/**
- * Holt die neueste Version von GitHub (oder anderem Server)
- * @returns Die neueste verfügbare Version als String
- */
-async function getLatestVersion(): Promise<string> {
-    try {
-        // In einer echten Implementation würden wir die GitHub-API oder eine eigene API abfragen
-        // Hier simulieren wir eine Antwort
-        
-        // Für Testzwecke: Gibt manchmal eine neuere Version zurück, manchmal die aktuelle
-        const testVersions = ['0.2.2', '0.2.3', '0.2.2'];
-        return testVersions[Math.floor(Math.random() * testVersions.length)];
-        
-        // Echte Implementation würde etwa so aussehen:
-        /*
-        const response = await axios.get('https://api.github.com/repos/model-router/guido-model-router/releases/latest');
-        return response.data.tag_name.replace('v', '');
-        */
-    } catch (error) {
-        logger.error('Fehler beim Abrufen der neuesten Version:', error);
-        return CURRENT_VERSION; // Aktuelle Version zurückgeben, wenn Fehler auftritt
-    }
+      });
+  } catch (error) {
+    logger.error("Force update check failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    vscode.window.showErrorMessage("Update-Prüfung fehlgeschlagen");
+  }
 }
